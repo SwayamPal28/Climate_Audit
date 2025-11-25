@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+torch
+torch_geometric    # if used in your pipeline
+scikit-learn
+pandas
+numpy
+pyyaml
+pydantic
+networkx
+geopy
+python-multipart
+joblib
