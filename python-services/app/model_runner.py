@@ -83,7 +83,7 @@ class GNNWrapper:
 
         print("\n===== DEBUG: Starting anomaly prediction =====")
     
-    # 1️Check expected numeric columns
+    # 1. Check expected numeric columns
         expected_numeric_cols = ['gdp_usd', 'co2_emissions_kt']
         missing_numeric = [c for c in expected_numeric_cols if c not in df.columns]
         if missing_numeric:
@@ -91,33 +91,44 @@ class GNNWrapper:
         else:
             print(f"All expected numeric columns are present: {expected_numeric_cols}")
 
-    # 2️Check categorical columns
+    # 2. Check categorical columns
         missing_cats = [c for c in self.cat_cols if c not in df.columns]
         if missing_cats:
             print(f" Missing categorical columns: {missing_cats}")
         else:
             print(f"All expected categorical columns are present: {self.cat_cols}")
-            for col in self.cat_cols:
-                print(f"{col} unique values (first 10): {df[col].unique()[:10]}")
+            # Only print first few to keep logs clean
+            if not df.empty:
+                for col in self.cat_cols:
+                    print(f"{col} unique values (first 10): {df[col].unique()[:10]}")
 
-    # 3️ Show numeric stats
+    # 3. Show numeric stats
         numeric_cols = [col for col in expected_numeric_cols if col in df.columns]
         if numeric_cols:
             print("\n--- Numeric column stats ---")
             print(df[numeric_cols].describe())
 
-    # 4️Encode features
+    # 4. Encode features
         try:
             features = self._encode_features(df)
-            print("\n--- Features after encoding (first 10 rows) ---")
+            
+            # === CRITICAL MATH FIX START ===
+            # We must apply Log Transform because the model was trained on log-data.
+            # This turns 17,000,000,000 into ~23.5
+            print("\n--- Applying Log Transform (np.log1p) ---")
+            features = np.log1p(features)
+            # === CRITICAL MATH FIX END ===
+
+            print("\n--- Features after encoding & log (first 10 rows) ---")
             print(features[:10])
         except Exception as e:
             print(f" Error during feature encoding: {e}")
             raise e
 
-    # 5️Scale numeric features
+    # 5. Scale numeric features
         try:
-            features[:, :len(numeric_cols)] = self.scaler.transform(features[:, :len(numeric_cols)])
+            # Note: Features are already log-transformed now, so scaling will work correctly
+            features = self.scaler.transform(features)
             print("\n--- Features after scaling (first 10 rows) ---")
             print(features[:10])
         except Exception as e:
@@ -148,5 +159,3 @@ class GNNWrapper:
 
         print(" Anomaly prediction completed.\n")
         return result
-
-
