@@ -1,10 +1,9 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import pandas as pd
 import numpy as np
-import json, subprocess
 from app.model_runner import GNNWrapper
 
 app = FastAPI()
@@ -21,15 +20,16 @@ app.add_middleware(
 BASE = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE / "data"
 
-gnn = GNNWrapper(device='cpu')  # load once
+# Load model
+gnn = GNNWrapper(device='cpu')
 
 @app.get("/api/audit/anomalies")
 def get_top_anomalies():
     try:
-        # 1. Read the original CSV
+        # 1. Read Data
         nodes = pd.read_csv(DATA_DIR / "nodes_final_physics.csv")
         
-        # 2. Get predictions
+        # 2. Predict
         results = gnn.predict_anomaly_scores(nodes, None)
         
         # 3. Merge scores
@@ -38,27 +38,18 @@ def get_top_anomalies():
         else:
             nodes["anomaly_score"] = results
 
-        # 4. Handle NaN values by replacing them with None
-        nodes = nodes.replace({np.nan: None})
+        # 4. Sort
+        top_pos_df = nodes.sort_values("anomaly_score", ascending=False).head(5)
+        top_neg_df = nodes.sort_values("anomaly_score", ascending=True).head(5)
         
-        # 5. Sort and get top anomalies, handling None values
-        top_pos = nodes.sort_values("anomaly_score", ascending=False, na_position='last').head(5)
-        top_neg = nodes.sort_values("anomaly_score", ascending=True, na_position='last').head(5)
-        
-        # 6. Convert to dictionary and ensure all values are JSON serializable
-        def clean_dict(d):
-            return {k: (None if (isinstance(v, float) and pd.isna(v)) else v) 
-                   for k, v in d.items()}
-        
+        # 5. Clean and Convert to Dict
+        # We use .replace to ensure any runtime NaNs become None (valid JSON)
         return {
-            "top_positive": [clean_dict(rec) for rec in top_pos.to_dict(orient='records')],
-            "top_negative": [clean_dict(rec) for rec in top_neg.to_dict(orient='records')]
+            "top_positive": top_pos_df.replace({np.nan: None}).to_dict(orient="records"),
+            "top_negative": top_neg_df.replace({np.nan: None}).to_dict(orient="records")
         }
-        
     except Exception as e:
-        print(f"Error in get_top_anomalies: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error in anomalies: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/calculate/shapley")
@@ -67,6 +58,7 @@ async def calculate_shapley(payload: dict):
     params = payload.get("params", {})
     if not target:
         raise HTTPException(status_code=400, detail="target_country required")
+    
     alloc = gnn.run_shapley(target, params)
     return {"allocations": alloc}
 
@@ -79,76 +71,65 @@ def get_nodes_csv():
 
 @app.get("/api/graph")
 def get_graph_data():
-    # 1. Load Nodes
-    nodes_path = DATA_DIR / "nodes_final_physics.csv"
-    if not nodes_path.exists():
-        raise HTTPException(status_code=404, detail="Nodes file not found")
+    try:
+        nodes_path = DATA_DIR / "nodes_final_physics.csv"
+        edges_path = DATA_DIR / "edges_ready_for_ai.csv"
 
-    nodes_df = pd.read_csv(nodes_path)
-    nodes = []
-    node_ids = set()
-    
-    # Create Nodes List
-    for _, row in nodes_df.iterrows():
-        # Ensure ID is a string and stripped of whitespace
-        node_id = str(row.get("iso3", "UNK")).strip()
+        if not nodes_path.exists():
+            raise HTTPException(status_code=404, detail="Nodes file not found")
+
+        # --- 1. PROCESS NODES (Vectorized) ---
+        nodes_df = pd.read_csv(nodes_path)
         
-        # Skip invalid IDs
-        if node_id == "nan" or node_id == "UNK":
-            continue
+        # Prepare structure for frontend: id, label, ...
+        # We use a copy to avoid SettingWithCopy warnings
+        graph_nodes = nodes_df.copy()
+        graph_nodes['id'] = graph_nodes['iso3'].astype(str).str.strip()
+        graph_nodes['label'] = graph_nodes['wb_code'].astype(str)
+        
+        # Keep only what we need
+        graph_nodes = graph_nodes[['id', 'label', 'gdp_usd', 'co2_emissions_kt']]
+        
+        # Get set of valid IDs for filtering edges later
+        valid_ids = set(graph_nodes['id'])
+        
+        print(f"✅ Loaded {len(graph_nodes)} nodes.")
 
-        nodes.append({
-            "id": node_id,
-            "label": str(row.get("wb_code", node_id)),
-            "gdp_usd": row.get("gdp_usd", 0),
-            "co2_emissions_kt": row.get("co2_emissions_kt", 0)
-        })
-        node_ids.add(node_id)
-
-    print(f"✅ Loaded {len(nodes)} nodes. Sample IDs: {list(node_ids)[:5]}")
-
-    # 2. Load Edges using Pandas directly (More robust than manual parsing)
-    links = []
-    edges_path = DATA_DIR / "edges_ready_for_ai.csv"
-    
-    if edges_path.exists():
-        try:
-            # Load CSV directly. on_bad_lines='skip' handles malformed rows
+        # --- 2. PROCESS EDGES (Vectorized) ---
+        final_links = []
+        
+        if edges_path.exists():
+            # Read edges
             edges_df = pd.read_csv(edges_path, on_bad_lines='skip')
+            edges_df.columns = [str(c).strip() for c in edges_df.columns]
             
-            # Normalize column names just in case (strip whitespace)
-            edges_df.columns = [c.strip() for c in edges_df.columns]
+            # Clean IDs
+            edges_df['source'] = edges_df['source_iso3'].astype(str).str.strip()
+            edges_df['target'] = edges_df['target_iso3'].astype(str).str.strip()
             
-            print(f"📂 Edge columns found: {edges_df.columns.tolist()}")
+            # FILTER: Only keep edges where both Source and Target exist in our Node list
+            # This is 100x faster than a for loop
+            mask = edges_df['source'].isin(valid_ids) & edges_df['target'].isin(valid_ids)
+            valid_edges = edges_df[mask].copy()
             
-            # Iterate and filter
-            valid_edges_count = 0
-            dropped_edges_count = 0
+            # Rename value column
+            valid_edges['value'] = valid_edges['primaryValue']
             
-            for _, row in edges_df.iterrows():
-                # Ensure source/target are strings and stripped
-                s = str(row.get('source_iso3', '')).strip()
-                t = str(row.get('target_iso3', '')).strip()
-                
-                # Logic: Only add edge if BOTH nodes exist in our node list
-                if s in node_ids and t in node_ids:
-                    links.append({
-                        "source": s,
-                        "target": t,
-                        "value": float(row.get('primaryValue', 1))
-                    })
-                    valid_edges_count += 1
-                else:
-                    dropped_edges_count += 1
+            # Select final columns
+            final_links = valid_edges[['source', 'target', 'value']].to_dict(orient="records")
             
-            print(f"✅ Successfully loaded {valid_edges_count} edges.")
-            print(f"⚠️ Dropped {dropped_edges_count} edges (nodes missing from subset).")
-            
-        except Exception as e:
-            print(f"❌ Error reading edges CSV: {e}")
-            import traceback
-            traceback.print_exc()
-    else:
-        print(f"❌ Edges file not found at {edges_path}")
+            print(f"✅ Loaded {len(final_links)} edges.")
+        else:
+            print("❌ Edges file not found.")
 
-    return {"nodes": nodes, "links": links}
+        # Final Return with Safety Replace
+        return {
+            "nodes": graph_nodes.replace({np.nan: None}).to_dict(orient="records"),
+            "links": final_links
+        }
+
+    except Exception as e:
+        print(f"🔥 Error in get_graph_data: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

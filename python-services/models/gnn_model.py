@@ -10,8 +10,7 @@ class ClimaAuditGNN(nn.Module):
         # Layer 1: Local trade partners
         self.conv1 = GCNConv(num_features, 16)
         # Layer 2: Global context
-        self.conv2 = GCNConv(16, 1)  # Output = Emission Score
-
+        self.conv2 = GCNConv(16, 1)  
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
 
