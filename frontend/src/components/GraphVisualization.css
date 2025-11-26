@@ -40,6 +40,21 @@
   background-color: #1d4ed8;
 }
 
+/* Style for the new Clear Edges button */
+.clear-button {
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    font-size: 14px;
+}
+.clear-button:hover {
+    filter: brightness(0.9);
+}
+
+
 .info-panel {
   position: absolute;
   top: 16px;
