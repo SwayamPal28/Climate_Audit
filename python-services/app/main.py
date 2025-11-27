@@ -115,7 +115,7 @@ def get_graph_data():
         graph_nodes = graph_nodes[present_cols]
         
         valid_ids = set(graph_nodes['id'])
-        print(f"✅ Loaded {len(graph_nodes)} nodes.")
+        print(f" Loaded {len(graph_nodes)} nodes.")
 
         # --- 2. PROCESS EDGES (Vectorized) ---
         final_links = []
@@ -140,9 +140,9 @@ def get_graph_data():
             final_links_df = valid_edges[final_link_cols]
             final_links = clean_df_for_json(final_links_df).to_dict(orient="records")
             
-            print(f"✅ Loaded {len(final_links)} edges.")
+            print(f" Loaded {len(final_links)} edges.")
         else:
-            print("❌ Edges file not found.")
+            print(" Edges file not found.")
 
         # Final Return (Apply comprehensive JSON cleaning universally)
         return {
@@ -151,7 +151,7 @@ def get_graph_data():
         }
 
     except Exception as e:
-        error_msg = f"🔥 Error in get_graph_data: {str(e)}"
+        error_msg = f" Error in get_graph_data: {str(e)}"
         print(error_msg)
         import traceback
         traceback.print_exc()

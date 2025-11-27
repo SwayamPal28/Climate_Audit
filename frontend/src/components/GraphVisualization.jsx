@@ -265,42 +265,42 @@ const GraphVisualization = () => {
             setHoverNode(null);
         }}
         className="clear-button"
-        style={{ position: 'absolute', top: 16, left: 200, zIndex: 1000, backgroundColor: '#f97316' }}
+        style={{ position: 'absolute', top: 16, left: 200, zIndex: 1000, backgroundColor: '#0573f2ff' }}
       >
         Clear Edges
       </button>
 
 
       <div className="info-panel">
-        <div className="panel-title">🌐 Graph Stats</div>
-        <div>🌍 <strong>Countries:</strong> {graphData.nodes?.length || 0}</div>
-        <div>🔗 <strong>Total Connections:</strong> {fullLinks.length || 0}</div>
-        <div>🔗 <strong>Visible Connections:</strong> {visibleLinks.length || 0}</div>
+        <div className="panel-title"> Graph Stats</div>
+        <div> <strong>Countries:</strong> {graphData.nodes?.length || 0}</div>
+        <div> <strong>Total Connections:</strong> {fullLinks.length || 0}</div>
+        <div> <strong>Visible Connections:</strong> {visibleLinks.length || 0}</div>
         <p style={{marginTop: '10px', fontWeight: 'bold'}}>
-            💡 Click on a node to see its trade routes.
+             Click on a node to see its trade routes.
         </p>
         
         {/* Display Hovered Node Information (only if link is NOT hovered) */}
         {(hoverNode && !hoverLink) && (
             <div style={{ marginTop: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }}>
-                ⭐ <strong>Hovered Node:</strong> {hoverNode.label || 'Unknown'}
+                 <strong>Hovered Node:</strong> {hoverNode.label || 'Unknown'}
                 <br/>
-                💰 <strong>GDP:</strong> ${formatNumber(hoverNode.gdp_usd, ' USD')}
+                 <strong>GDP:</strong> ${formatNumber(hoverNode.gdp_usd, ' USD')}
             </div>
         )}
         
         {/* Display Hovered Link Information */}
         {hoverLink && (
              <div style={{ marginTop: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }}>
-                 🔗 <strong>Route:</strong> {getCountryName(hoverLink.source.iso3)} → {getCountryName(hoverLink.target.iso3)}
+                 <strong>Route:</strong> {getCountryName(hoverLink.source.iso3)} → {getCountryName(hoverLink.target.iso3)}
                  <br/>
-                 💰 <strong>Trade Value:</strong> ${formatNumber(hoverLink.primaryValue, ' USD')}
+                  <strong>Trade Value:</strong> ${formatNumber(hoverLink.primaryValue, ' USD')}
                  <br/>
-                 ⚖️ <strong>Net Weight:</strong> {formatNumber(hoverLink.netWgt, ' kg')}
+                  <strong>Net Weight:</strong> {formatNumber(hoverLink.netWgt, ' kg')}
                  <br/>
-                 🚢 <strong>Distance:</strong> {formatNumber(hoverLink.distance_km, ' km')}
+                  <strong>Distance:</strong> {formatNumber(hoverLink.distance_km, ' km')}
                  <br/>
-                 🔥 <strong>Est. CO2:</strong> {formatNumber(hoverLink.transport_emissions_tCO2, ' tCO2')}
+                  <strong>Est. CO2:</strong> {formatNumber(hoverLink.transport_emissions_tCO2, ' tCO2')}
              </div>
         )}
       </div>

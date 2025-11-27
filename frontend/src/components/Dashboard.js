@@ -1,102 +1,93 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import './Dashboard.css';
 
-function Dashboard() {
-  const [status, setStatus] = useState("Checking...");
+const Dashboard = () => {
   const [anomalies, setAnomalies] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Removed 'error' state to prevent warnings
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAnomalies = async () => {
       try {
-        const anomaliesRes = await axios.get("http://localhost:8000/api/audit/anomalies");
-        const combinedData = [
-          ...(anomaliesRes.data.top_positive || []), 
-          ...(anomaliesRes.data.top_negative || [])
-        ];
+        const response = await fetch('http://localhost:8000/api/audit/anomalies');
+        const data = await response.json();
         
-        setAnomalies(combinedData);
-        setStatus("OK");
-      } catch (err) {
-        setStatus("Backend not reachable");
-        // We log the error to console instead of setting state
-        console.error(err);
+        // Process and combine all anomalies
+        const processData = (items) => items.map(item => ({
+          ...item,
+          country_name: item.country_name || item.wb_name || item.name || 'N/A',
+          iso3: item.iso3 || item.wb_code || 'N/A',
+          gdp_usd: Number(item.gdp_usd) || 0,
+          co2_emissions_kt: Number(item.co2_emissions_kt) || 0,
+          anomaly_score: Number(item.anomaly_score) || 0
+        }));
+
+        // Combine and sort all anomalies
+        const allAnomalies = [
+          ...processData(data.top_positive || []),
+          ...processData(data.top_negative || [])
+        ].sort((a, b) => Math.abs(b.anomaly_score) - Math.abs(a.anomaly_score));
+
+        setAnomalies(allAnomalies);
+      } catch (error) {
+        console.error('Error fetching anomalies:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
+    fetchAnomalies();
   }, []);
 
+  if (isLoading) {
+    return <div className="loading">Loading dashboard data...</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Climate Audit X</h1>
-          <div className="mt-2 flex items-center">
-            <span className="text-sm font-medium">Backend Status: </span>
-            <span className={`ml-2 px-2 py-1 text-xs rounded-full ${status === "OK" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-              {status}
-            </span>
-          </div>
-        </header>
+    <div className="dashboard-container">
+      <header className="dashboard-header">
+        <h1>Climate Audit Dashboard</h1>
+        <p>Analysis of environmental and economic indicators</p>
+      </header>
 
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <div>
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Anomaly Detection Results</h3>
-            </div>
-            <Link 
-              to="/visualization" 
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
-            >
-              View 3D Graph
-            </Link>
+      <div className="dashboard-content">
+        <div className="dashboard-card">
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Anomaly Score</th>
+                  <th>GDP (USD)</th>
+                  <th>CO2 (kt)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {anomalies.map((item, index) => (
+                  <tr key={index}>
+                    <td>{item.iso3}</td>
+                    <td className={item.anomaly_score > 0 ? 'positive' : 'negative'}>
+                      {item.anomaly_score?.toFixed(4)}
+                    </td>
+                    <td>${item.gdp_usd?.toLocaleString()}</td>
+                    <td>{item.co2_emissions_kt?.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        </div>
 
-          <div className="border-t border-gray-200">
-             {isLoading ? (
-               <div className="p-6 text-center">Loading...</div>
-             ) : (
-                <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Country</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GDP</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CO2 Emissions</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Anomaly Score</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {anomalies.map((anomaly, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{anomaly.wb_code || 'N/A'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${anomaly.gdp_usd?.toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{anomaly.co2_emissions_kt?.toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            anomaly.anomaly_score > 0 
-                              ? 'bg-red-100 text-red-800' 
-                              : 'bg-green-100 text-green-800'
-                          }`}>
-                            {anomaly.anomaly_score?.toFixed(4)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                </div>
-             )}
-          </div>
+        <div className="visualization-cta">
+          <h3>Explore the Data Visually</h3>
+          <p>View an interactive 3D visualization of the climate data</p>
+          <Link to="/visualization" className="cta-button">
+            View 3D Visualization
+          </Link>
         </div>
       </div>
     </div>
   );
-}
+};
 
 export default Dashboard;
