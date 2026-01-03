@@ -33,7 +33,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchAnomalies = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/audit/anomalies');
+        const response = await fetch('/api/audit/anomalies');
         const data = await response.json();
         
         // Process and combine all anomalies

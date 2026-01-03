@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 class ShapleyRequest(BaseModel):
     target_country: str
+    producer_ratio: float = 0.6  # fraction [0.0, 1.0] kept by producer (SELF)
 
 
 # --- 1. DEFINITIVE JSON CLEANUP HELPER (CRITICAL FOR JSON) ---
@@ -104,9 +105,22 @@ async def calculate_shapley(payload: ShapleyRequest):
     # Create Shapley engine (NOT on GNNWrapper)
     shapley_engine = ShapleyEngine(gnn, nodes_df, edges_df)
 
-    allocations = shapley_engine.run_shapley(target)
+    # Pass producer_ratio through to the engine (validate bounds)
+    pr = payload.producer_ratio if hasattr(payload, 'producer_ratio') else 0.6
+    try:
+        pr = float(pr)
+    except Exception:
+        pr = 0.6
+    pr = max(0.0, min(1.0, pr))
 
-    return {"allocations": allocations}
+    result = shapley_engine.run_shapley(target, producer_ratio=pr)
+
+    # Ensure API always returns { allocations: {...}, meta: {...} }
+    if isinstance(result, dict) and 'allocations' in result and 'meta' in result:
+        return result
+    else:
+        # Backwards-compatible: if engine returned only allocations dict, wrap it
+        return {"allocations": result, "meta": {}}
 
 
 
