@@ -59,29 +59,40 @@ def get_top_anomalies():
         # 1. Read Data
         nodes = pd.read_csv(DATA_DIR / "nodes_final_physics.csv")
 
-        # 2. Predict (GNNWrapper handles its own NaN cleaning internally)
+        # --- FIX: COLUMN NORMALIZATION ---
+        # Map available CO2 columns to the 'co2_emissions_kt' name expected by the model
+        col_map = {
+            'co2_kt': 'co2_emissions_kt',
+            'production_tCO2': 'co2_emissions_kt'
+        }
+        for old_col, new_col in col_map.items():
+            if old_col in nodes.columns and new_col not in nodes.columns:
+                nodes[new_col] = nodes[old_col]
+        # ---------------------------------
+
+        # 2. Predict
         results = gnn.predict_anomaly_scores(nodes, None)
 
         # 3. Merge scores
-        if "anomaly_score" in results.columns:
+        if isinstance(results, pd.DataFrame) and "anomaly_score" in results.columns:
             nodes["anomaly_score"] = results["anomaly_score"]
         else:
             nodes["anomaly_score"] = results
 
-        # 4. Sort and Clean (Applying the clean_df_for_json helper here is safest)
+        # 4. Sort and Clean
         nodes_cleaned = clean_df_for_json(nodes)
 
         top_pos_df = nodes_cleaned.sort_values("anomaly_score", ascending=False).head(5)
         top_neg_df = nodes_cleaned.sort_values("anomaly_score", ascending=True).head(5)
 
-        # 5. Convert to Dict (The DataFrame is already clean)
         return {
             "top_positive": top_pos_df.to_dict(orient="records"),
             "top_negative": top_neg_df.to_dict(orient="records"),
         }
     except Exception as e:
         print(f"Error in anomalies: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return the specific error message to help debugging
+        raise HTTPException(status_code=500, detail=f"Backend Error: {str(e)}")
 
 
 # @app.post("/api/calculate/shapley")

@@ -8,7 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PY_HOST = process.env.PY_HOST || "http://localhost:8001"; // Python service
+const PY_HOST = process.env.PY_HOST || "http://localhost:8000"; // Python service
 
 // --- Health check ---
 app.get('/health', (req, res) => {
