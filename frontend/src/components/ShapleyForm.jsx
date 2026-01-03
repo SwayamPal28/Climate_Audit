@@ -13,7 +13,7 @@ export default function ShapleyForm() {
     setResult(resp.data.allocations);
   };
 
-  const data = result ? Object.entries(result).map(([k, v]) => ({ name: k, value: v * 100 })) : [];
+  const data = result ? Object.entries(result).map(([k, v]) => ({ name: k, value: v })) : [];
 
   return (
     <div>
