@@ -90,21 +90,38 @@ const GraphVisualization = () => {
         }
         const data = await response.json();
         
-        // 1. Process Nodes (Robustly assign ID and ISO3)
-        const nodes = (data.nodes || []).map(node => {
+        // 1. Sanitize Data before graph sees it (Prevent NaN issues)
+        const cleanNodes = (data.nodes || []).map(node => {
           // Attempt to find the ISO code using multiple possible keys
-          const iso3 = node.iso3 || node.wb_code || node.id; 
+          const iso3 = node.iso3 || node.wb_code || node.id || node.iso; 
           
-          return {
+          // Ensure all numeric fields are proper numbers (fallback to 0 if missing/null/NaN)
+          const cleanNode = {
             ...node,
             // CRITICAL FIX: Ensure 'id' is a guaranteed string of the ISO code
             id: String(iso3), 
             iso3: String(iso3), // Explicitly set the ISO3 code
             label: nameMap[iso3] || iso3, // Map ISO3 to Country Name for label
-            gdp_usd: Number(node.gdp_usd) || 0,
-          }
+            
+            // FORCE NUMBERS (Prevent 'NaN' string) - Backend should send these, but double-check
+            gdp: Number(node.gdp) || Number(node.gdp_usd) || 0,
+            gdp_usd: Number(node.gdp_usd) || Number(node.gdp) || 0,
+            co2: Number(node.co2) || Number(node.co2_emissions_kt) || Number(node.energy_intensity) || 0,
+            anomaly_score: Number(node.anomaly_score) || 0
+          };
+          
+          return cleanNode;
         // Filter out any invalid or missing codes
-        }).filter(node => node.iso3 && node.iso3 !== 'not found' && node.iso3 !== 'undefined'); 
+        }).filter(node => node.iso3 && node.iso3 !== 'not found' && node.iso3 !== 'undefined' && node.iso3 !== 'NAN');
+        
+        console.log("✅ Graph Data Loaded:", {
+          nodes: cleanNodes.length,
+          links: (data.links || []).length,
+          sample: cleanNodes[0] // Check Console: Does this have numbers?
+        });
+        
+        // Use cleaned nodes
+        const nodes = cleanNodes; 
 
         // 2. Process Links (Robustly map using all possible keys)
         const nodeMap = new Map(nodes.map(node => [node.id, node]));
@@ -248,12 +265,16 @@ const GraphVisualization = () => {
 
         // Transform object -> array and attach absolute values using meta.grand_total_tCO2 or legacy key
         const total = meta?.grand_total_tCO2 ?? meta?.total_emissions_tCO2 ?? null;
-        const arr = Object.entries(alloc).map(([k, v]) => ({
-          name: k,
-          pct: Number(v),
-          abs: total != null ? (Number(v) / 100.0) * total : null,
-          log: total != null ? Math.log10((Number(v) / 100.0) * total + 1) : null,
-        })).sort((a, b) => b.pct - a.pct);
+        const arr = Object.entries(alloc).map(([k, v]) => {
+          const pct = Number(v) || 0;
+          const abs = total != null && total > 0 ? (pct / 100.0) * total : null;
+          return {
+            name: k,
+            pct: pct,
+            abs: abs,
+            log: abs != null && abs > 0 ? Math.log10(abs + 1) : null,
+          };
+        }).sort((a, b) => b.pct - a.pct);
 
         setShapleyData(arr);
         setShapleyMeta(meta);
@@ -467,7 +488,7 @@ const GraphVisualization = () => {
             ) : (
               <div style={{ maxHeight: '220px', overflowY: 'auto', marginTop: 8 }}>
                 <div style={{ fontSize: 13, color: '#374151', marginBottom: 8 }}>
-                  Totals: SELF = {shapleyMeta ? Number(shapleyMeta.self_emission_tCO2).toLocaleString() + ' tCO2' : 'N/A'}, Partners = {shapleyMeta ? Number(shapleyMeta.partners_total_tCO2 ?? shapleyMeta.total_exported_tCO2).toLocaleString() + ' tCO2' : 'N/A'}, Grand = {shapleyMeta ? Number(shapleyMeta.grand_total_tCO2 ?? shapleyMeta.total_emissions_tCO2).toLocaleString() + ' tCO2' : 'N/A'}
+                  Totals: SELF = {shapleyMeta && !isNaN(shapleyMeta.self_emission_tCO2) ? Number(shapleyMeta.self_emission_tCO2).toLocaleString() + ' tCO2' : 'N/A'}, Partners = {shapleyMeta && !isNaN(shapleyMeta.partners_total_tCO2 ?? shapleyMeta.total_exported_tCO2) ? Number(shapleyMeta.partners_total_tCO2 ?? shapleyMeta.total_exported_tCO2).toLocaleString() + ' tCO2' : 'N/A'}, Grand = {shapleyMeta && !isNaN(shapleyMeta.grand_total_tCO2 ?? shapleyMeta.total_emissions_tCO2) ? Number(shapleyMeta.grand_total_tCO2 ?? shapleyMeta.total_emissions_tCO2).toLocaleString() + ' tCO2' : 'N/A'}
                 </div>
                 {shapleyData[0] && shapleyData[0].pct > 90 && (
                   <div style={{ marginBottom: 8, color: '#b91c1c' }}><strong>High SELF share</strong> — country-reported emissions dwarf transport emissions.</div>
