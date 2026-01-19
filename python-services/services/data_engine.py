@@ -1,204 +1,96 @@
-# python-services/services/data_engine.py
 import pandas as pd
-import os
 from pathlib import Path
+import numpy as np
 
 class DataEngine:
     def __init__(self, data_dir=None):
-        """
-        Initialize the Data Engine with nodes and edges data.
-        Applies real-world data cleaning and normalization.
-        """
         if data_dir is None:
-            # Default to data directory relative to this file
             base_dir = Path(__file__).resolve().parents[1]
             data_dir = base_dir / "data"
-        
         self.data_dir = Path(data_dir)
-        
-        # Load nodes
+
+        print("🚀 Initializing ClimaAuditX Data Engine (Strict Real Data)...")
+
+        # 1. LOAD NODES
         nodes_path = self.data_dir / "nodes_final.csv"
-        if not nodes_path.exists():
-            nodes_path = self.data_dir / "nodes_final_physics.csv"
-        
         if nodes_path.exists():
             self.nodes_df = pd.read_csv(nodes_path)
-            # Clean ISO codes
             self.nodes_df['iso3'] = self.nodes_df['iso3'].astype(str).str.strip().str.upper()
-            self.iso_to_idx = {iso: i for i, iso in enumerate(self.nodes_df['iso3']) if pd.notna(iso) and iso != 'NAN'}
+            self.nodes_df['gdp'] = pd.to_numeric(self.nodes_df['gdp'], errors='coerce').fillna(1e9)
+            self.nodes_df['energy_intensity'] = pd.to_numeric(self.nodes_df['energy_intensity'], errors='coerce').fillna(0)
+            self.iso_to_idx = {iso: i for i, iso in enumerate(self.nodes_df['iso3'])}
+            print(f"   ✅ Loaded {len(self.nodes_df)} Country Nodes")
         else:
+            print("   ❌ CRITICAL: nodes_final.csv not found")
             self.nodes_df = pd.DataFrame()
             self.iso_to_idx = {}
-            print("⚠️ Warning: Nodes file not found. DataEngine will have limited functionality.")
-        
-        # Load Edges (We use Steel as the primary proxy, but can merge all sectors)
-        # In production, load all 3 (Steel, Energy, Textile) and merge them
-        self.edges = pd.DataFrame()
-        edge_files = [
-            self.data_dir / "processed_steel_direct.csv",
-            self.data_dir / "processed_energy_direct.csv",
-            self.data_dir / "processed_textiles_direct.csv",
-        ]
-        
-        for edge_file in edge_files:
-            if edge_file.exists():
-                try:
-                    edges_df = pd.read_csv(edge_file, on_bad_lines="skip", nrows=100000)
-                    edges_df.columns = [str(c).strip() for c in edges_df.columns]
-                    
-                    # Check for src_iso/tgt_iso columns
-                    if 'src_iso' in edges_df.columns and 'tgt_iso' in edges_df.columns:
-                        if self.edges.empty:
-                            self.edges = edges_df[['src_iso', 'tgt_iso', 'primaryValue']].copy()
-                        else:
-                            # Merge with existing edges (sum values for duplicate pairs)
-                            new_edges = edges_df[['src_iso', 'tgt_iso', 'primaryValue']].copy()
-                            combined = pd.concat([self.edges, new_edges])
-                            self.edges = combined.groupby(['src_iso', 'tgt_iso'])['primaryValue'].sum().reset_index()
-                        print(f"✅ Loaded edges from {edge_file.name}")
-                except Exception as e:
-                    print(f"⚠️ Error loading {edge_file.name}: {e}")
-        
-        if self.edges.empty:
-            print("⚠️ Warning: Edge Data not found. Features will be limited.")
-        else:
-            # Clean ISO codes in edges
-            self.edges['src_iso'] = self.edges['src_iso'].astype(str).str.strip().str.upper()
-            self.edges['tgt_iso'] = self.edges['tgt_iso'].astype(str).str.strip().str.upper()
-            # Ensure primaryValue is numeric
-            self.edges['primaryValue'] = pd.to_numeric(self.edges['primaryValue'], errors='coerce').fillna(0)
-            print(f"✅ DataEngine initialized with {len(self.edges)} edges")
 
-    def get_clean_contributors(self, target_iso):
-        """
-        Returns the REAL top partners for a country, applying 3 Fixes:
-        1. Mirroring (Look at what others sent TO target)
-        2. Thresholding (Ignore tiny economies and small trades)
-        3. Normalization (Don't let one huge commodity skew everything)
+        # 2. LOAD AI PREDICTIONS
+        self.ai_scores = {}
+        pred_path = self.data_dir / "gnn_predictions.csv"
+        if pred_path.exists():
+            try:
+                df_pred = pd.read_csv(pred_path)
+                for _, row in df_pred.iterrows():
+                    iso = str(row.get('iso3', '')).strip().upper()
+                    if iso: self.ai_scores[iso] = float(row.get('residual', 0))
+                print(f"   ✅ Loaded {len(self.ai_scores)} AI Risk Scores")
+            except: pass
+
+        # 3. LOAD ACTUAL EDGES (Direct + Re-export)
+        self.viz_edges = []
+        sectors = ['steel', 'energy', 'textiles']
         
-        Args:
-            target_iso: ISO3 code of the target country (e.g., "IND", "CHN")
-            
-        Returns:
-            List of contributor dictionaries with partner, score, share, role
-        """
-        target_iso = str(target_iso).strip().upper()
+        for sector in sectors:
+            # CHECK BOTH FLOW TYPES
+            for flow in ['direct', 'reexport']: 
+                fpath = self.data_dir / f"processed_{sector}_{flow}.csv"
+                if fpath.exists():
+                    try:
+                        df = pd.read_csv(fpath, low_memory=False)
+                        df['primaryValue'] = pd.to_numeric(df['primaryValue'], errors='coerce').fillna(0)
+                        
+                        # Load ALL relevant edges (Limit 50k to prevent crash, but capture mostly everything)
+                        top_edges = df.nlargest(50000, 'primaryValue')
+                        
+                        for _, row in top_edges.iterrows():
+                            src = str(row['src_iso']).strip().upper()
+                            tgt = str(row['tgt_iso']).strip().upper()
+                            
+                            if src in self.iso_to_idx and tgt in self.iso_to_idx:
+                                self.viz_edges.append({
+                                    "source": src,
+                                    "target": tgt,
+                                    "source_iso3": src,
+                                    "target_iso3": tgt,
+                                    "value": float(row['primaryValue']),
+                                    "sector": sector,
+                                    "type": flow, # 'direct' or 'reexport'
+                                    "co2_mean": float(row.get('mc_mean_co2', 0)),
+                                    "co2_max": float(row.get('mc_p95_co2', 0)),
+                                    "uncertainty": float(row.get('uncertainty_factor', 1.0))
+                                })
+                    except Exception as e:
+                        print(f"   ⚠️ Error loading {sector}_{flow}: {e}")
         
-        if target_iso not in self.iso_to_idx:
-            return []
-        
-        if self.edges.empty:
-            return []
-        
-        # --- FIX 1: THE MIRROR LOGIC ---
-        # Find rows where target is the DESTINATION (Imports)
-        # This finds countries that exported TO the target country
-        incoming_trade = self.edges[self.edges['tgt_iso'] == target_iso].copy()
-        
-        if incoming_trade.empty:
-            # No imports found - country might be isolated or data incomplete
-            return []
-        
-        # --- FIX 2: THE BHUTAN/NOISE FILTER ---
-        # Filter 1: Trade must be > $1 Million (removes noise)
-        incoming_trade = incoming_trade[incoming_trade['primaryValue'] > 1e6]
-        
-        if incoming_trade.empty:
-            return []
-        
-        # Filter 2: Partner GDP must be > $5 Billion (Removes tiny islands/Bhutan)
-        valid_partners = []
-        results = []
-        
-        # Calculate total volume for normalization
-        total_volume = incoming_trade['primaryValue'].sum()
-        if total_volume <= 0:
-            return []
-        
-        for _, row in incoming_trade.iterrows():
-            partner_iso = str(row['src_iso']).strip().upper()
-            
-            # Skip if partner is the same as target
-            if partner_iso == target_iso:
-                continue
-            
-            # Lookup Partner GDP
-            if partner_iso in self.iso_to_idx:
-                p_idx = self.iso_to_idx[partner_iso]
-                p_row = self.nodes_df.iloc[p_idx]
-                p_gdp = float(p_row.get('gdp', 0)) if pd.notna(p_row.get('gdp', 0)) else 0
-                
-                # The "Bhutan Filter" - Skip tiny economies
-                if p_gdp < 5e9: 
-                    continue
-                
-                # Get partner energy intensity for carbon risk calculation
-                p_intensity = float(p_row.get('energy_intensity', 50)) if pd.notna(p_row.get('energy_intensity', 50)) else 50
-                
-                # --- FIX 3: NORMALIZED SCORING ---
-                # We blend Trade Volume (70%) with Carbon Intensity Risk (30%)
-                # This prevents a clean but high-volume partner from looking too "dirty"
-                # and prevents dirty but low-volume partners from being ignored
-                
-                trade_share = row['primaryValue'] / total_volume
-                
-                # Heuristic Score: Blend volume with carbon intensity
-                # Higher intensity = higher carbon risk per dollar
-                # Formula: (Volume Weight * Trade Share) + (Carbon Weight * Intensity Factor)
-                volume_weight = 0.7
-                carbon_weight = 0.3
-                
-                # Normalize intensity to 0-1 scale (assuming max intensity ~150)
-                intensity_factor = min(p_intensity / 150.0, 1.0)
-                
-                # Combined impact score
-                impact_score = (volume_weight * trade_share) + (carbon_weight * intensity_factor)
-                
-                results.append({
-                    "partner": partner_iso,
-                    "raw_score": impact_score,
-                    "volume": float(row['primaryValue']),
-                    "trade_share": trade_share,
-                    "intensity": p_intensity
-                })
-        
-        if not results:
-            return []
-        
-        # Sort by Impact Score (Real Carbon Risk) not just Dollars
-        results.sort(key=lambda x: x['raw_score'], reverse=True)
-        
-        # Normalize to percentages for the UI
-        final_total = sum(r['raw_score'] for r in results)
-        if final_total <= 0:
-            return []
-        
-        formatted_contributors = []
-        for r in results[:10]:  # Top 10 Only
-            share_pct = (r['raw_score'] / final_total) * 100
-            
-            # Auto-Detect Role (Simplified)
-            role = "Producer"
-            if r['partner'] in ['SGP', 'ARE', 'NLD', 'HKG', 'BDI']:
-                role = "Middleman 🚩"
-            
-            formatted_contributors.append({
-                "partner": r['partner'],
-                "score": round(r['raw_score'], 4),
-                "share": f"{share_pct:.1f}%",
-                "role": role,
-                "volume": r['volume'],
-                "intensity": r['intensity']
+        print(f"   ✅ Final Graph: {len(self.viz_edges)} Links (No Dummy Data)")
+
+    def get_graph_data(self):
+        nodes = []
+        for _, row in self.nodes_df.iterrows():
+            iso = row['iso3']
+            if iso == 'NAN': continue
+            nodes.append({
+                "id": iso, "iso3": iso, "label": iso,
+                "gdp_usd": float(row['gdp']),
+                "co2": float(row['energy_intensity']), 
+                "anomaly_score": self.ai_scores.get(iso, 0)
             })
-        
-        return formatted_contributors
+        return {"nodes": nodes, "links": self.viz_edges}
 
-# Initialize once (will be imported by main.py)
-data_engine = None
-
+_instance = None
 def get_data_engine(data_dir=None):
-    """Factory function to get or create the data engine singleton"""
-    global data_engine
-    if data_engine is None:
-        data_engine = DataEngine(data_dir)
-    return data_engine
+    global _instance
+    if _instance is None:
+        _instance = DataEngine(data_dir)
+    return _instance
