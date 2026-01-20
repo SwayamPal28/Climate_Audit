@@ -25,6 +25,18 @@ class PolicySimulationRequest(BaseModel):
     target_countries: Optional[List[str]] = None
     attribution_mode: str = "shapley"  # For FAIRNESS_DIAL: "producer", "consumer", or "shapley"
 
+class BilateralOptimizationRequest(BaseModel):
+    src_iso: str
+    tgt_iso: str
+    sector: Optional[str] = None
+    max_gdp_loss_pct: float = 0.15
+    elasticity: float = 0.8
+
+class CustomAttributionRequest(BaseModel):
+    target_country: str
+    split_ratio: float = 0.6  # 0.0 to 1.0 (0.6 = 60% producer, 40% consumer)
+    sector: Optional[str] = None
+
 # --- 1. DEFINITIVE JSON CLEANUP HELPER ---
 def clean_df_for_json(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.select_dtypes(include=[np.number]).columns:
@@ -56,6 +68,7 @@ MODEL_DIR = BASE / "models"
 
 from services.data_engine import get_data_engine
 from app.policy_simulator import PolicySimulator
+from app.advanced_policy_engine import AdvancedPolicyEngine
 
 data_engine = get_data_engine(DATA_DIR)
 
@@ -96,6 +109,32 @@ try:
         print(f"⚠️  WARNING: {model_path} not found! Using Heuristic Scoring Fallback.")
 except Exception as e:
     print(f"⚠️  WARNING: Model Load Error: {e}")
+
+
+# --- INITIALIZE ADVANCED POLICY ENGINE ---
+advanced_engine = None
+try:
+    if nodes_df_v2 is not None and not data_engine.edges.empty:
+        # Ensure edges have required columns
+        edges_for_engine = data_engine.edges.copy()
+        
+        # Standardize column names if needed
+        if 'source_iso3' in edges_for_engine.columns and 'src_iso' not in edges_for_engine.columns:
+            edges_for_engine['src_iso'] = edges_for_engine['source_iso3']
+        if 'target_iso3' in edges_for_engine.columns and 'tgt_iso' not in edges_for_engine.columns:
+            edges_for_engine['tgt_iso'] = edges_for_engine['target_iso3']
+        if 'value' in edges_for_engine.columns and 'primaryValue' not in edges_for_engine.columns:
+            edges_for_engine['primaryValue'] = edges_for_engine['value']
+        
+        advanced_engine = AdvancedPolicyEngine(
+            nodes_df=nodes_df_v2.copy(),
+            edges_df=edges_for_engine
+        )
+        print("✅ Advanced Policy Engine Initialized (MRIO Framework)")
+    else:
+        print("⚠️  WARNING: Advanced Policy Engine not initialized - missing data")
+except Exception as e:
+    print(f"⚠️  WARNING: Error initializing Advanced Policy Engine: {e}")
 
 
 # --- ENDPOINTS ---
@@ -325,6 +364,7 @@ def get_graph_data():
                         "source_iso3": src, 
                         "target_iso3": tgt,
                         "value": float(row['primaryValue']),
+                        "primaryValue": float(row['primaryValue']),
                         "sector": row['sector']
                     })
         
@@ -423,7 +463,8 @@ async def simulate_policy(payload: PolicySimulationRequest):
                         "target": tgt,
                         "source_iso3": src,
                         "target_iso3": tgt,
-                        "value": float(row[val_col]) if pd.notna(row[val_col]) else 0.0
+                        "value": float(row[val_col]) if pd.notna(row[val_col]) else 0.0,
+                        "primaryValue": float(row[val_col]) if pd.notna(row[val_col]) else 0.0
                     }
                     if 'sector' in row and pd.notna(row.get('sector')):
                         link_obj["sector"] = str(row['sector'])
@@ -442,6 +483,70 @@ async def simulate_policy(payload: PolicySimulationRequest):
         
     except Exception as e:
         print(f"Error in policy simulation: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- NEW ADVANCED POLICY ENGINE ENDPOINTS ---
+
+@app.post("/api/optimize/bilateral")
+async def optimize_bilateral_policy(payload: BilateralOptimizationRequest):
+    """
+    Generate optimal bilateral policy using Pareto frontier analysis
+    
+    Finds the best tax/tariff rate that maximizes carbon reduction
+    while keeping economic loss within acceptable limits.
+    """
+    if advanced_engine is None:
+        raise HTTPException(status_code=503, detail="Advanced Policy Engine not available")
+    
+    try:
+        result = advanced_engine.generate_optimal_bilateral_policy(
+            src_iso=payload.src_iso.strip().upper(),
+            tgt_iso=payload.tgt_iso.strip().upper(),
+            sector=payload.sector,
+            max_gdp_loss_pct=payload.max_gdp_loss_pct,
+            elasticity=payload.elasticity
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error in bilateral optimization: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/simulate/custom-attribution")
+async def simulate_custom_attribution(payload: CustomAttributionRequest):
+    """
+    Simulate custom carbon attribution model
+    
+    Allows flexible blame splitting (e.g., 60% producer, 40% consumer)
+    and shows financial impact redistribution.
+    """
+    if advanced_engine is None:
+        raise HTTPException(status_code=503, detail="Advanced Policy Engine not available")
+    
+    try:
+        result = advanced_engine.simulate_custom_split(
+            target_country=payload.target_country.strip().upper(),
+            split_ratio=payload.split_ratio,
+            sector=payload.sector
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error in custom attribution: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
