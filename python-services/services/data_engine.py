@@ -241,6 +241,63 @@ class DataEngine:
             
         return final_list
 
+    def get_bilateral_trade(self, src_iso, tgt_iso):
+        """
+        Returns list of sectors and volumes from Src to Tgt
+        Used by MARL engine to identify leverage points
+        """
+        src_iso = str(src_iso).strip().upper()
+        tgt_iso = str(tgt_iso).strip().upper()
+        
+        if self.edges.empty:
+            return []
+        
+        # Filter edges from src to tgt
+        mask = (self.edges['src_iso'] == src_iso) & (self.edges['tgt_iso'] == tgt_iso)
+        trades = self.edges[mask]
+        
+        if trades.empty:
+            return []
+        
+        # Aggregate by sector
+        summary = trades.groupby('sector')['primaryValue'].sum().reset_index()
+        
+        result = []
+        for _, row in summary.iterrows():
+            result.append({
+                "sector": row['sector'],
+                "value": float(row['primaryValue'])
+            })
+        
+        return result
+
+    def get_sector_volume(self, src_iso, tgt_iso, sector):
+        """
+        Get specific trade volume for a single sector
+        Used to calculate precise economic damage
+        """
+        sector_data = self.get_bilateral_trade(src_iso, tgt_iso)
+        
+        for s in sector_data:
+            # Case-insensitive partial match
+            if sector.lower() in s['sector'].lower():
+                return s['value']
+        
+        return 0.0
+    
+    def get_node(self, iso):
+        """
+        Get node details for a specific country
+        Used to assign AI persona based on economic profile
+        """
+        iso = str(iso).strip().upper()
+        
+        if iso in self.iso_to_idx:
+            idx = self.iso_to_idx[iso]
+            return self.nodes_df.iloc[idx].to_dict()
+        
+        return {}
+
 # --- SINGLETON & FACTORY ---
 _data_engine_instance = None
 

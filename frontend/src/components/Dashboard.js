@@ -175,6 +175,16 @@ const Dashboard = () => {
             Launch Policy Lab
           </Link>
         </div>
+
+        <div className="visualization-cta" style={{ marginTop: '20px' }}>
+          <div className="cta-text">
+            <h3>⚔️ Diplomatic War Room</h3>
+            <p>Test policies against AI opponents. See how countries retaliate in real-time game scenarios.</p>
+          </div>
+          <Link to="/diplomacy" className="cta-button" style={{ backgroundColor: '#ef4444' }}>
+            Enter Sandbox (BETA)
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -13,6 +13,9 @@ import os
 from models.hetero_gnn import ClimaAuditHeteroGNN
 # If you have a specific wrapper class, import it, but direct loading works fine too.
 
+# Import LLM Analyst Engine
+from app.llm_analyst import LLMAnalystEngine
+
 from pydantic import BaseModel
 
 class ShapleyRequest(BaseModel):
@@ -36,6 +39,51 @@ class CustomAttributionRequest(BaseModel):
     target_country: str
     split_ratio: float = 0.6  # 0.0 to 1.0 (0.6 = 60% producer, 40% consumer)
     sector: Optional[str] = None
+
+class DiplomacyStartRequest(BaseModel):
+    player_iso: str
+    rival_iso: str
+
+class DiplomacyTurnRequest(BaseModel):
+    player_iso: str
+    rival_iso: str
+    action_type: str  # "TARIFF", "SANCTION"
+    sector: str
+    severity: float  # 0.0 to 1.0
+
+# LLM Analysis Request Models
+class PolicyAnalysisRequest(BaseModel):
+    policy_type: str
+    severity: float
+    metrics: Dict
+    context: Optional[Dict] = None
+
+class ShapleyAnalysisRequest(BaseModel):
+    target_country: str
+    allocations: Dict
+    contributors: List
+    total_co2_kt: float
+
+class DiplomaticAnalysisRequest(BaseModel):
+    player_iso: str
+    rival_iso: str
+    turn_summary: Dict
+    ai_persona: str
+
+class BilateralAnalysisRequest(BaseModel):
+    source: str
+    target: str
+    sector: str
+    policy: Dict
+    upstream_impact: List
+
+class AnomalyAnalysisRequest(BaseModel):
+    anomalies: List[Dict]
+
+class ChatRequest(BaseModel):
+    conversation_history: List
+    user_question: str
+    context_data: Dict
 
 # --- 1. DEFINITIVE JSON CLEANUP HELPER ---
 def clean_df_for_json(df: pd.DataFrame) -> pd.DataFrame:
@@ -69,6 +117,7 @@ MODEL_DIR = BASE / "models"
 from services.data_engine import get_data_engine
 from app.policy_simulator import PolicySimulator
 from app.advanced_policy_engine import AdvancedPolicyEngine
+from app.marl_engine import DiplomaticSandbox
 
 data_engine = get_data_engine(DATA_DIR)
 
@@ -135,6 +184,29 @@ try:
         print("⚠️  WARNING: Advanced Policy Engine not initialized - missing data")
 except Exception as e:
     print(f"⚠️  WARNING: Error initializing Advanced Policy Engine: {e}")
+
+
+# --- INITIALIZE DIPLOMATIC SANDBOX (MARL ENGINE) ---
+sandbox_engine = None
+try:
+    if data_engine is not None:
+        sandbox_engine = DiplomaticSandbox(data_engine)
+        print("✅ Diplomatic Sandbox (MARL Engine) Initialized")
+    else:
+        print("⚠️  WARNING: Diplomatic Sandbox not initialized - missing data engine")
+except Exception as e:
+    print(f"⚠️  WARNING: Error initializing Diplomatic Sandbox: {e}")
+
+
+# --- INITIALIZE LLM ANALYST ENGINE ---
+llm_analyst = None
+try:
+    llm_analyst = LLMAnalystEngine()
+    print("✅ LLM Analyst Engine Initialized")
+except Exception as e:
+    print(f"⚠️  WARNING: LLM Analyst Engine not initialized: {e}")
+    print("    AI analysis features will be unavailable.")
+
 
 
 # --- ENDPOINTS ---
@@ -550,3 +622,194 @@ async def simulate_custom_attribution(payload: CustomAttributionRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- DIPLOMATIC SANDBOX (MARL) ENDPOINTS ---
+
+@app.post("/api/diplomacy/start")
+def start_diplomacy(payload: DiplomacyStartRequest):
+    """
+    Initialize a diplomatic game scenario between player and AI opponent.
+    
+    Returns game state with leverage points, vulnerabilities, and AI persona.
+    """
+    if sandbox_engine is None:
+        raise HTTPException(status_code=503, detail="Diplomatic Sandbox not available")
+    
+    try:
+        result = sandbox_engine.start_scenario(
+            payload.player_iso.upper(), 
+            payload.rival_iso.upper()
+        )
+        return result
+    except Exception as e:
+        print(f"Error starting diplomacy scenario: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/diplomacy/turn")
+def play_turn(payload: DiplomacyTurnRequest):
+    """
+    Process one turn of the diplomatic game.
+    
+    Calculates player's action impact, AI evaluation, and AI retaliation.
+    Returns round summary with both moves and new tension level.
+    """
+    if sandbox_engine is None:
+        raise HTTPException(status_code=503, detail="Diplomatic Sandbox not available")
+    
+    try:
+        result = sandbox_engine.process_turn(
+            payload.player_iso.upper(),
+            payload.rival_iso.upper(),
+            payload.action_type,
+            payload.sector,
+            payload.severity
+        )
+        return result
+    except Exception as e:
+        print(f"Error processing turn: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- LLM ANALYSIS ENDPOINTS ---
+
+@app.post("/api/llm/analyze-policy")
+async def analyze_policy(request: PolicyAnalysisRequest):
+    """
+    Analyze policy simulation results using AI
+    
+    Provides executive summary, key findings, tradeoffs, and recommendations
+    for CBAM, Tech Transfer, and Fairness Dial policies.
+    """
+    if llm_analyst is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="LLM Analyst not available. Check API key configuration."
+        )
+    
+    try:
+        analysis = llm_analyst.analyze_policy_simulation(request.dict())
+        return {"status": "success", "analysis": analysis}
+    except Exception as e:
+        print(f"Error in policy analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/llm/analyze-shapley")
+async def analyze_shapley(request: ShapleyAnalysisRequest):
+    """
+    Explain Shapley carbon attribution in plain language
+    
+    Converts game-theoretic attribution into understandable explanations
+    with policy implications.
+    """
+    if llm_analyst is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="LLM Analyst not available. Check API key configuration."
+        )
+    
+    try:
+        analysis = llm_analyst.analyze_shapley_attribution(request.dict())
+        return {"status": "success", "analysis": analysis}
+    except Exception as e:
+        print(f"Error in Shapley analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/llm/analyze-diplomatic")
+async def analyze_diplomatic(request: DiplomaticAnalysisRequest):
+    """
+    Analyze diplomatic game turn with strategic insights
+    
+    Explains why AI retaliated, game theory reasoning, and suggests
+    next moves to reach Nash equilibrium.
+    """
+    if llm_analyst is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="LLM Analyst not available. Check API key configuration."
+        )
+    
+    try:
+        analysis = llm_analyst.analyze_diplomatic_turn(request.dict())
+        return {"status": "success", "analysis": analysis}
+    except Exception as e:
+        print(f"Error in diplomatic analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/llm/analyze-bilateral")
+async def analyze_bilateral(request: BilateralAnalysisRequest):
+    """
+    Explain bilateral policy optimization results
+    
+    Describes Pareto-optimal tax rates, upstream impacts, and
+    political feasibility of implementation.
+    """
+    if llm_analyst is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="LLM Analyst not available. Check API key configuration."
+        )
+    
+    try:
+        analysis = llm_analyst.analyze_bilateral_optimization(request.dict())
+        return {"status": "success", "analysis": analysis}
+    except Exception as e:
+        print(f"Error in bilateral analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/llm/analyze-anomalies")
+async def analyze_anomalies(request: AnomalyAnalysisRequest):
+    """
+    Root cause analysis for anomaly detection
+    
+    Explains why countries are flagged as high-risk and suggests
+    policy levers to address issues.
+    """
+    if llm_analyst is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="LLM Analyst not available. Check API key configuration."
+        )
+    
+    try:
+        analysis = llm_analyst.analyze_graph_anomalies(request.dict())
+        return {"status": "success", "analysis": analysis}
+    except Exception as e:
+        print(f"Error in anomaly analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/llm/chat")
+async def llm_chat(request: ChatRequest):
+    """
+    Handle follow-up questions with conversation context
+    
+    Maintains conversation history and provides contextual answers
+    based on original simulation data.
+    """
+    if llm_analyst is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="LLM Analyst not available. Check API key configuration."
+        )
+    
+    try:
+        response = llm_analyst.chat(
+            request.conversation_history,
+            request.user_question,
+            request.context_data
+        )
+        return {"status": "success", "response": response}
+    except Exception as e:
+        print(f"Error in chat: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

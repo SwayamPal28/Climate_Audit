@@ -3,6 +3,7 @@ import ForceGraph3D from 'react-force-graph-3d';
 import { useNavigate } from 'react-router-dom';
 import * as d3 from 'd3';
 import './GraphVisualization.css';
+import LLMAnalystPanel from './LLMAnalystPanel';
 
 // --- Helper: Fetch Country Names ---
 const fetchCountryNameMap = async () => {
@@ -161,7 +162,9 @@ const GraphVisualization = () => {
   const [shapleyLoading, setShapleyLoading] = useState(false);
   const [shapleyError, setShapleyError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchMessage, setSearchMessage] = useState(null);
+
+  // LLM Analysis state
+  const [selectedNodeForAnalysis, setSelectedNodeForAnalysis] = useState(null);
 
   const getCountryName = useCallback((iso3) => isoToNameMap[iso3] || iso3, [isoToNameMap]);
 
@@ -303,6 +306,16 @@ const GraphVisualization = () => {
 
       setShapleyData(arr);
       setShapleyMeta(meta);
+
+      // Update LLM analysis data with Shapley results
+      if (node) {
+        setSelectedNodeForAnalysis({
+          target_country: node.id,
+          allocations: alloc,
+          contributors: data?.contributors || [],
+          total_co2_kt: meta?.grand_total_tCO2 || 0
+        });
+      }
     } catch (err) {
       setShapleyError('Data unavailable.');
     } finally {
@@ -333,6 +346,16 @@ const GraphVisualization = () => {
     setGraphData(prev => ({ ...prev, links: uniqueLinks }));
     setSelectedNode(node);
 
+    // Prepare Shapley data for LLM analysis
+    // We'll trigger this after Shapley calculation completes
+    // For now, just set basic node info
+    setSelectedNodeForAnalysis({
+      target_country: node.id,
+      allocations: {},  // Will be updated by fetchShapley
+      contributors: [],
+      total_co2_kt: node.co2 || 0
+    });
+
     if (fgRef.current) {
       const distRatio = 1 + 300 / Math.hypot(node.x, node.y, node.z);
       fgRef.current.cameraPosition(
@@ -344,7 +367,6 @@ const GraphVisualization = () => {
   };
 
   const handleSearch = () => {
-    setSearchMessage(null);
     const q = searchQuery.trim().toUpperCase();
     if (!q) return;
     let node = graphData.nodes.find(n => n.id === q || n.iso3 === q);
@@ -353,9 +375,6 @@ const GraphVisualization = () => {
     if (node) {
       setHoverNode(node);
       handleNodeClick(node);
-      setSearchMessage(`Found: ${node.label}`);
-    } else {
-      setSearchMessage("Not Found");
     }
   };
 
@@ -385,7 +404,6 @@ const GraphVisualization = () => {
             setSelectedNode(null);
             setShapleyData([]);
             setSearchQuery('');
-            setSearchMessage(null);
           }}
           className="action-btn clear-btn"
         >
@@ -492,6 +510,16 @@ const GraphVisualization = () => {
           <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '14px', border: '2px dashed #e2e8f0', borderRadius: '14px' }}>
             Select a node on the graph to begin deep-audit analysis.
           </div>
+        )}
+
+        {/* LLM Analysis Panel for Shapley */}
+        {selectedNodeForAnalysis && selectedNodeForAnalysis.allocations && Object.keys(selectedNodeForAnalysis.allocations).length > 0 && (
+          <LLMAnalystPanel
+            analysisType="shapley"
+            simulationData={selectedNodeForAnalysis}
+            autoTrigger={true}
+            collapsed={false}
+          />
         )}
       </div>
 

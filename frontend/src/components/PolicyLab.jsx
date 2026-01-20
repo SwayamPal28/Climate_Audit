@@ -6,6 +6,7 @@ import './PolicyLab.css';
 import BilateralPolicySelector from './BilateralPolicySelector';
 import DeltaComparisonCard from './DeltaComparisonCard';
 import UpstreamImpactTable from './UpstreamImpactTable';
+import LLMAnalystPanel from './LLMAnalystPanel';
 
 const POLICY_SCENARIOS = [
   { value: 'CBAM', label: 'EU CBAM (Carbon Border Tax)' },
@@ -42,6 +43,10 @@ const PolicyLab = () => {
   // Bilateral analysis states
   const [bilateralResults, setBilateralResults] = useState(null);
   const [isBilateralLoading, setIsBilateralLoading] = useState(false);
+
+  // LLM Analysis state
+  const [latestSimulation, setLatestSimulation] = useState(null);
+  const [bilateralResultForAnalysis, setBilateralResultForAnalysis] = useState(null);
 
   // Physics tuning for MAXIMUM node spacing - EXTREME SETTINGS
   useEffect(() => {
@@ -119,6 +124,14 @@ const PolicyLab = () => {
       if (response.data && response.data.simulated) {
         setSimulatedGraph(response.data.simulated);
         setMetrics(response.data.metrics || null);
+
+        // Store for LLM analysis
+        setLatestSimulation({
+          policy_type: scenario,
+          severity: severity,
+          metrics: response.data.metrics || {},
+          context: { attribution_mode: attributionMode }
+        });
 
         // Reset graph view
         setTimeout(() => {
@@ -210,6 +223,15 @@ const PolicyLab = () => {
           })
         });
       }
+
+      // Prepare for LLM analysis
+      setBilateralResultForAnalysis({
+        source: response.data.route_info?.source || params.src_iso,
+        target: response.data.route_info?.target || params.tgt_iso,
+        sector: params.sector || 'All',
+        policy: response.data.policy || {},
+        upstream_impact: response.data.upstream_impact || []
+      });
 
     } catch (error) {
       console.error('Error in bilateral optimization:', error);
@@ -475,6 +497,16 @@ const PolicyLab = () => {
               )}
             </div>
           )}
+
+          {/* LLM Analysis Panel */}
+          {latestSimulation && (
+            <LLMAnalystPanel
+              analysisType="policy"
+              simulationData={latestSimulation}
+              autoTrigger={true}
+              collapsed={false}
+            />
+          )}
         </div>
       ) : (
         <>
@@ -500,6 +532,16 @@ const PolicyLab = () => {
                 />
               )}
             </>
+          )}
+
+          {/* LLM Analysis Panel for Bilateral */}
+          {bilateralResultForAnalysis && (
+            <LLMAnalystPanel
+              analysisType="bilateral"
+              simulationData={bilateralResultForAnalysis}
+              autoTrigger={true}
+              collapsed={false}
+            />
           )}
         </>
       )}
