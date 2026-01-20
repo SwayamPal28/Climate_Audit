@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 // Import your new components (make sure the filenames match exactly)
 import ShapleyForm from "./components/ShapleyForm"; 
-import GraphVisualization from "./components/GraphVisualization"; 
+import GraphVisualization from "./components/GraphVisualization";
+import PolicyLab from "./components/PolicyLab"; 
 
 function App() {
   const [anomalies, setAnomalies] = useState({ top_positive: [], top_negative: [] });
@@ -94,6 +95,14 @@ function App() {
           )}
         </div>
 
+      </div>
+
+      {/* SECTION 5: POLICY LAB - Full Width */}
+      <div style={{ marginTop: "40px" }}>
+        <div style={cardStyle}>
+          <h3 style={{ marginBottom: "20px", color: "#2c3e50" }}>🧪 Policy Lab - What-If Scenarios</h3>
+          <PolicyLab />
+        </div>
       </div>
     </div>
   );

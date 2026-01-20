@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from typing import Any, Union, Dict, List
+from typing import Any, Union, Dict, List, Optional
 import torch
 import os
 
@@ -18,6 +18,12 @@ from pydantic import BaseModel
 class ShapleyRequest(BaseModel):
     target_country: str
     producer_ratio: float = 0.6
+
+class PolicySimulationRequest(BaseModel):
+    policy_type: str  # "CBAM", "TECH_TRANSFER", or "FAIRNESS_DIAL"
+    severity: float = 0.2  # 0.0 to 1.0
+    target_countries: Optional[List[str]] = None
+    attribution_mode: str = "shapley"  # For FAIRNESS_DIAL: "producer", "consumer", or "shapley"
 
 # --- 1. DEFINITIVE JSON CLEANUP HELPER ---
 def clean_df_for_json(df: pd.DataFrame) -> pd.DataFrame:
@@ -49,6 +55,8 @@ DATA_DIR = BASE / "data"
 MODEL_DIR = BASE / "models"
 
 from services.data_engine import get_data_engine
+from app.policy_simulator import PolicySimulator
+
 data_engine = get_data_engine(DATA_DIR)
 
 # --- V2.0: LOAD DATA ---
@@ -325,4 +333,115 @@ def get_graph_data():
 
     except Exception as e:
         print(f"Error in graph endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/simulate/policy")
+async def simulate_policy(payload: PolicySimulationRequest):
+    """
+    Policy Simulation Endpoint
+    
+    Runs 'What-If' scenarios:
+    - CBAM: Simulates EU carbon border adjustment (reduces trade volume to EU)
+    - TECH_TRANSFER: Simulates technology transfer (reduces emission intensity)
+    - FAIRNESS_DIAL: Changes attribution framework (producer/consumer/shapley)
+    """
+    try:
+        # Get original graph data
+        original_graph = get_graph_data()
+        
+        # Get edges DataFrame
+        if data_engine.edges.empty:
+            raise HTTPException(status_code=503, detail="Edge data not loaded")
+        
+        # Initialize simulator
+        simulator = PolicySimulator(
+            data_engine=data_engine,
+            nodes_df=nodes_df_v2.copy(),
+            edges_df=data_engine.edges.copy(),
+            iso_to_idx=iso_to_idx
+        )
+        
+        # Run simulation
+        result = simulator.simulate_policy(
+            policy_type=payload.policy_type,
+            severity=payload.severity,
+            target_countries=payload.target_countries,
+            attribution_mode=payload.attribution_mode
+        )
+        
+        # Convert simulated data back to graph format
+        sim_nodes_df = pd.DataFrame(result["simulated_nodes"])
+        sim_edges_df = pd.DataFrame(result["simulated_edges"])
+        
+        # Rebuild graph structure
+        sim_nodes = []
+        valid_ids = set()
+        
+        for idx, row in sim_nodes_df.iterrows():
+            iso3 = str(row['iso3']).strip().upper()
+            if not iso3 or iso3 == 'NAN': continue
+            
+            e_int = float(row.get('energy_intensity', row.get('co2', 0)))
+            valid_ids.add(iso3)
+            node_obj = {
+                "id": iso3, "iso": iso3, "iso3": iso3,
+                "label": iso3,
+                "gdp_usd": float(row.get('gdp', 0)),
+                "co2": e_int,
+                "anomaly_score": e_int
+            }
+            # Preserve color override from policy simulation
+            if 'node_color_override' in row and pd.notna(row.get('node_color_override')):
+                node_obj['node_color_override'] = str(row['node_color_override'])
+            sim_nodes.append(node_obj)
+        
+        sim_links = []
+        if not sim_edges_df.empty:
+            # Check which columns exist
+            src_col = 'src_iso' if 'src_iso' in sim_edges_df.columns else ('source_iso3' if 'source_iso3' in sim_edges_df.columns else 'source')
+            tgt_col = 'tgt_iso' if 'tgt_iso' in sim_edges_df.columns else ('target_iso3' if 'target_iso3' in sim_edges_df.columns else 'target')
+            val_col = 'primaryValue' if 'primaryValue' in sim_edges_df.columns else 'value'
+            
+            # Build aggregation dict
+            agg_dict = {val_col: 'sum'}
+            if 'sector' in sim_edges_df.columns:
+                agg_dict['sector'] = 'first'
+            # Preserve edge_color from policy simulation
+            if 'edge_color' in sim_edges_df.columns:
+                agg_dict['edge_color'] = 'first'
+            
+            # Aggregate edges
+            agg_edges = sim_edges_df.groupby([src_col, tgt_col]).agg(agg_dict).reset_index()
+            
+            for _, row in agg_edges.iterrows():
+                src = str(row[src_col]).strip().upper()
+                tgt = str(row[tgt_col]).strip().upper()
+                
+                if src in valid_ids and tgt in valid_ids and src != tgt:
+                    link_obj = {
+                        "source": src,
+                        "target": tgt,
+                        "source_iso3": src,
+                        "target_iso3": tgt,
+                        "value": float(row[val_col]) if pd.notna(row[val_col]) else 0.0
+                    }
+                    if 'sector' in row and pd.notna(row.get('sector')):
+                        link_obj["sector"] = str(row['sector'])
+                    # Preserve edge color from policy simulation
+                    if 'edge_color' in row and pd.notna(row.get('edge_color')):
+                        link_obj["edge_color"] = str(row['edge_color'])
+                    sim_links.append(link_obj)
+        
+        return {
+            "original": original_graph,
+            "simulated": {"nodes": sim_nodes, "links": sim_links},
+            "policy_type": result["policy_type"],
+            "metrics": result["metrics"],
+            "severity": payload.severity
+        }
+        
+    except Exception as e:
+        print(f"Error in policy simulation: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

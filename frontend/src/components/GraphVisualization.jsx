@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { useNavigate } from 'react-router-dom';
-import * as d3 from 'd3'; 
+import * as d3 from 'd3';
 import './GraphVisualization.css';
 
 // --- Helper: Fetch Country Names ---
 const fetchCountryNameMap = async () => {
   try {
-    const response = await fetch('/iso3_to_name_map.csv'); 
+    const response = await fetch('/iso3_to_name_map.csv');
     if (!response.ok) return { 'USA': 'United States', 'CHN': 'China', 'IND': 'India' };
     const csvText = await response.text();
     const data = d3.csvParse(csvText);
@@ -27,40 +27,40 @@ const SidebarRoleTable = ({ targetNode, links, allLinks, getCountryName }) => {
   if (!targetNode || !links) return null;
 
   const tradePartners = links.map(link => {
-    const isImporting = link.target.id === targetNode.id; 
+    const isImporting = link.target.id === targetNode.id;
     const partner = isImporting ? link.source : link.target;
-    
+
     let chainInfo = null;
     let type = isImporting ? 'DIRECT_SUPPLY' : 'DIRECT_BUY';
 
     // MIDDLEMAN LOGIC (With Loop Prevention)
     if (isImporting) {
-        // If partner sells to us, do they buy the SAME sector from someone else?
-        const upstreamSource = allLinks
-            .filter(l => l.target.id === partner.id && l.sector === link.sector)
-            .sort((a,b) => b.primaryValue - a.primaryValue)[0];
+      // If partner sells to us, do they buy the SAME sector from someone else?
+      const upstreamSource = allLinks
+        .filter(l => l.target.id === partner.id && l.sector === link.sector)
+        .sort((a, b) => b.primaryValue - a.primaryValue)[0];
 
-        if (upstreamSource && upstreamSource.source.id !== targetNode.id) {
-            type = 'MIDDLEMAN_SUPPLY';
-            chainInfo = {
-                origin: getCountryName(upstreamSource.source.iso3),
-                middle: getCountryName(partner.iso3),
-                destination: getCountryName(targetNode.iso3)
-            };
-        }
+      if (upstreamSource && upstreamSource.source.id !== targetNode.id) {
+        type = 'MIDDLEMAN_SUPPLY';
+        chainInfo = {
+          origin: getCountryName(upstreamSource.source.iso3),
+          middle: getCountryName(partner.iso3),
+          destination: getCountryName(targetNode.iso3)
+        };
+      }
     } else {
-        const downstreamDest = allLinks
-            .filter(l => l.source.id === partner.id && l.sector === link.sector)
-            .sort((a,b) => b.primaryValue - a.primaryValue)[0];
+      const downstreamDest = allLinks
+        .filter(l => l.source.id === partner.id && l.sector === link.sector)
+        .sort((a, b) => b.primaryValue - a.primaryValue)[0];
 
-        if (downstreamDest && downstreamDest.target.id !== targetNode.id) {
-            type = 'MIDDLEMAN_BUY';
-            chainInfo = {
-                origin: getCountryName(targetNode.iso3),
-                middle: getCountryName(partner.iso3),
-                destination: getCountryName(downstreamDest.target.iso3)
-            };
-        }
+      if (downstreamDest && downstreamDest.target.id !== targetNode.id) {
+        type = 'MIDDLEMAN_BUY';
+        chainInfo = {
+          origin: getCountryName(targetNode.iso3),
+          middle: getCountryName(partner.iso3),
+          destination: getCountryName(downstreamDest.target.iso3)
+        };
+      }
     }
 
     return {
@@ -78,57 +78,57 @@ const SidebarRoleTable = ({ targetNode, links, allLinks, getCountryName }) => {
 
   return (
     <div className="role-table-container" style={{ marginTop: '16px', borderTop: '1px solid #dae1e7', paddingTop: '12px' }}>
-      <div style={{fontSize: '11px', fontWeight: '700', color: '#7f8c8d', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px'}}>
+      <div style={{ fontSize: '11px', fontWeight: '700', color: '#7f8c8d', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
         Trade Flow Analysis
       </div>
-      
-      <div className="role-list" style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+
+      <div className="role-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {sortedPartners.map((p, i) => (
           <div key={i} className="role-card" style={{ background: 'white', border: '1px solid #f0f3f8', borderRadius: '6px', padding: '10px 12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
-            
+
             {/* ROW 1: THE VISUAL PATH */}
             <div style={{ display: 'flex', alignItems: 'center', fontSize: '13px', fontWeight: '500', color: '#2c3e50', marginBottom: '6px' }}>
-                
-                {/* Scenario A: Middleman Chain */}
-                {(p.type === 'MIDDLEMAN_SUPPLY' || p.type === 'MIDDLEMAN_BUY') && p.chain ? (
-                    <>
-                        <span style={{color: '#95a5a6'}}>{p.chain.origin}</span>
-                        <span style={{margin: '0 6px', color: '#b2bec3', fontSize: '10px'}}>▶</span>
-                        <span style={{color: '#e67e22', fontWeight: '700'}}>{p.chain.middle}</span> 
-                        <span style={{margin: '0 6px', color: '#b2bec3', fontSize: '10px'}}>▶</span>
-                        <span style={{color: '#2c3e50'}}>{p.chain.destination}</span>
-                    </>
-                ) : p.type === 'DIRECT_SUPPLY' ? (
+
+              {/* Scenario A: Middleman Chain */}
+              {(p.type === 'MIDDLEMAN_SUPPLY' || p.type === 'MIDDLEMAN_BUY') && p.chain ? (
+                <>
+                  <span style={{ color: '#95a5a6' }}>{p.chain.origin}</span>
+                  <span style={{ margin: '0 6px', color: '#b2bec3', fontSize: '10px' }}>▶</span>
+                  <span style={{ color: '#e67e22', fontWeight: '700' }}>{p.chain.middle}</span>
+                  <span style={{ margin: '0 6px', color: '#b2bec3', fontSize: '10px' }}>▶</span>
+                  <span style={{ color: '#2c3e50' }}>{p.chain.destination}</span>
+                </>
+              ) : p.type === 'DIRECT_SUPPLY' ? (
                 /* Scenario B: Direct Supply */
-                    <>
-                        <span style={{color: '#2c3e50', fontWeight: '600'}}>{p.name}</span>
-                        <span style={{margin: '0 6px', color: '#27ae60', fontSize: '10px'}}>▶</span> {/* Green Arrow */}
-                        <span style={{color: '#7f8c8d'}}>{targetNode.label}</span>
-                    </>
-                ) : (
+                <>
+                  <span style={{ color: '#2c3e50', fontWeight: '600' }}>{p.name}</span>
+                  <span style={{ margin: '0 6px', color: '#27ae60', fontSize: '10px' }}>▶</span> {/* Green Arrow */}
+                  <span style={{ color: '#7f8c8d' }}>{targetNode.label}</span>
+                </>
+              ) : (
                 /* Scenario C: Direct Buy */
-                    <>
-                        <span style={{color: '#7f8c8d'}}>{targetNode.label}</span>
-                        <span style={{margin: '0 6px', color: '#2980b9', fontSize: '10px'}}>▶</span> {/* Blue Arrow */}
-                        <span style={{color: '#2c3e50', fontWeight: '600'}}>{p.name}</span>
-                    </>
-                )}
+                <>
+                  <span style={{ color: '#7f8c8d' }}>{targetNode.label}</span>
+                  <span style={{ margin: '0 6px', color: '#2980b9', fontSize: '10px' }}>▶</span> {/* Blue Arrow */}
+                  <span style={{ color: '#2c3e50', fontWeight: '600' }}>{p.name}</span>
+                </>
+              )}
             </div>
 
             {/* ROW 2: DATA */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f9f9f9', paddingTop: '6px' }}>
-                <div style={{ fontSize: '11px', color: '#95a5a6', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ marginRight: '6px' }}>{p.sector}</span>
-                </div>
-                <div style={{ fontSize: '12px', fontFamily: 'monospace', fontWeight: '600', color: '#34495e' }}>
-                    ${(p.value / 1e9).toFixed(1)}B
-                    {p.isRisk && <span title="High Carbon Risk" style={{marginLeft: '4px', fontSize: '10px'}}>⚠️</span>}
-                </div>
+              <div style={{ fontSize: '11px', color: '#95a5a6', display: 'flex', alignItems: 'center' }}>
+                <span style={{ marginRight: '6px' }}>{p.sector}</span>
+              </div>
+              <div style={{ fontSize: '12px', fontFamily: 'monospace', fontWeight: '600', color: '#34495e' }}>
+                ${(p.value / 1e9).toFixed(1)}B
+                {p.isRisk && <span title="High Carbon Risk" style={{ marginLeft: '4px', fontSize: '10px' }}>⚠️</span>}
+              </div>
             </div>
 
           </div>
         ))}
-        {sortedPartners.length === 0 && <div style={{fontStyle:'italic', color:'#b2bec3', fontSize:'12px', textAlign:'center', padding:'10px'}}>No trade routes active.</div>}
+        {sortedPartners.length === 0 && <div style={{ fontStyle: 'italic', color: '#b2bec3', fontSize: '12px', textAlign: 'center', padding: '10px' }}>No trade routes active.</div>}
       </div>
     </div>
   );
@@ -137,14 +137,14 @@ const SidebarRoleTable = ({ targetNode, links, allLinks, getCountryName }) => {
 const GraphVisualization = () => {
   const navigate = useNavigate();
   const fgRef = useRef();
-  
+
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
-  const [fullLinks, setFullLinks] = useState([]); 
+  const [fullLinks, setFullLinks] = useState([]);
   const [visibleLinks, setVisibleLinks] = useState([]);
-  
-  const [hoverNode, setHoverNode] = useState(null); 
-  const [hoverLink, setHoverLink] = useState(null); 
-  
+
+  const [hoverNode, setHoverNode] = useState(null);
+  const [hoverLink, setHoverLink] = useState(null);
+
   const [activeSectors, setActiveSectors] = useState({
     steel: true,
     energy: true,
@@ -154,9 +154,9 @@ const GraphVisualization = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isoToNameMap, setIsoToNameMap] = useState({});
 
-  const [selectedNode, setSelectedNode] = useState(null); 
-  const [producerRatio, setProducerRatio] = useState(0.6); 
-  const [shapleyData, setShapleyData] = useState([]); 
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [producerRatio, setProducerRatio] = useState(0.6);
+  const [shapleyData, setShapleyData] = useState([]);
   const [shapleyMeta, setShapleyMeta] = useState(null);
   const [shapleyLoading, setShapleyLoading] = useState(false);
   const [shapleyError, setShapleyError] = useState(null);
@@ -175,20 +175,20 @@ const GraphVisualization = () => {
         const response = await fetch('/api/graph');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
-        
+
         const cleanNodes = (data.nodes || []).map(node => {
-          const iso3 = node.iso3 || node.id; 
+          const iso3 = node.iso3 || node.id;
           return {
             ...node,
-            id: String(iso3), 
-            iso3: String(iso3), 
+            id: String(iso3),
+            iso3: String(iso3),
             label: nameMap[iso3] || iso3,
             gdp_usd: Number(node.gdp_usd) || 0,
             co2: Number(node.co2) || 0,
             anomaly_score: Number(node.anomaly_score) || 0
           };
         }).filter(node => node.iso3 && node.iso3 !== 'NAN');
-        
+
         const nodeMap = new Map(cleanNodes.map(node => [node.id, node]));
         const links = (data.links || [])
           .map(link => {
@@ -196,22 +196,22 @@ const GraphVisualization = () => {
             const targetId = String(link.target_iso3 || link.target || '');
             const sourceObj = nodeMap.get(sourceId);
             const targetObj = nodeMap.get(targetId);
-            
-            if (!sourceObj || !targetObj) return null;
-            const rawValue = Number(link.value) || 0; 
 
-            return { 
-              source: sourceObj, 
-              target: targetObj, 
+            if (!sourceObj || !targetObj) return null;
+            const rawValue = Number(link.value) || 0;
+
+            return {
+              source: sourceObj,
+              target: targetObj,
               primaryValue: rawValue,
-              sector: link.sector || 'General', 
+              sector: link.sector || 'General',
               value: 1
             };
-          }).filter(link => link && link.primaryValue > 0); 
+          }).filter(link => link && link.primaryValue > 0);
 
-        setFullLinks(links); 
-        setGraphData({ nodes: cleanNodes, links: [] }); 
-        
+        setFullLinks(links);
+        setGraphData({ nodes: cleanNodes, links: [] });
+
       } catch (error) {
         console.error('Error loading graph:', error);
       } finally {
@@ -224,30 +224,30 @@ const GraphVisualization = () => {
   // --- PHYSICS & ZOOM FIX (SPACIOUS LAYOUT) ---
   useEffect(() => {
     const timer = setTimeout(() => {
-        if (fgRef.current) {
-            const controls = fgRef.current.controls();
-            const d3Force = fgRef.current.d3Force;
+      if (fgRef.current) {
+        const controls = fgRef.current.controls();
+        const d3Force = fgRef.current.d3Force;
 
-            // --- SPACIOUS TUNING ---
-            // Charge: -2000 pushes nodes far apart (Prevent clumping)
-            // Distance: 200 makes edges longer and cleaner
-            if (d3Force) {
-                d3Force('charge').strength(-2000); 
-                d3Force('link').distance(200);    
-                fgRef.current.d3ReheatSimulation(); // Force re-sim
-            }
-
-            if (controls) {
-                controls.minDistance = 0; 
-                controls.maxDistance = 10000;
-                controls.zoomSpeed = 2.5; 
-                controls.enableDamping = true;
-                controls.dampingFactor = 0.1;
-            }
+        // --- SPACIOUS TUNING ---
+        // Charge: -2000 pushes nodes far apart (Prevent clumping)
+        // Distance: 200 makes edges longer and cleaner
+        if (d3Force) {
+          d3Force('charge').strength(-2000);
+          d3Force('link').distance(200);
+          fgRef.current.d3ReheatSimulation(); // Force re-sim
         }
+
+        if (controls) {
+          controls.minDistance = 0;
+          controls.maxDistance = 10000;
+          controls.zoomSpeed = 2.5;
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.1;
+        }
+      }
     }, 200);
     return () => clearTimeout(timer);
-  }, [graphData]); 
+  }, [graphData]);
 
   // Initial Camera
   useEffect(() => {
@@ -258,26 +258,26 @@ const GraphVisualization = () => {
 
   // --- Helpers ---
   const isLinkVisible = (link) => {
-      const s = (link.sector || '').toLowerCase();
-      if (s.includes('steel') && !activeSectors.steel) return false;
-      if (s.includes('energy') && !activeSectors.energy) return false;
-      if (s.includes('textile') && !activeSectors.textiles) return false;
-      return true;
+    const s = (link.sector || '').toLowerCase();
+    if (s.includes('steel') && !activeSectors.steel) return false;
+    if (s.includes('energy') && !activeSectors.energy) return false;
+    if (s.includes('textile') && !activeSectors.textiles) return false;
+    return true;
   };
 
   const formatNumber = (num, unit = '') => {
-      if (typeof num !== 'number' || isNaN(num) || num === 0) return 'Trace'; 
-      if (Math.abs(num) >= 1.0e+9) return (Math.abs(num) / 1.0e+9).toFixed(2) + "B" + unit;
-      if (Math.abs(num) >= 1.0e+6) return (Math.abs(num) / 1.0e+6).toFixed(2) + "M" + unit;
-      return num.toLocaleString(undefined, { maximumFractionDigits: 0 }) + unit;
+    if (typeof num !== 'number' || isNaN(num) || num === 0) return 'Trace';
+    if (Math.abs(num) >= 1.0e+9) return (Math.abs(num) / 1.0e+9).toFixed(2) + "B" + unit;
+    if (Math.abs(num) >= 1.0e+6) return (Math.abs(num) / 1.0e+6).toFixed(2) + "M" + unit;
+    return num.toLocaleString(undefined, { maximumFractionDigits: 0 }) + unit;
   }
 
   const getSectorColor = (sector) => {
-      const s = String(sector || '').toLowerCase();
-      if (s.includes('steel')) return '#334155';
-      if (s.includes('energy')) return '#f43f5e';
-      if (s.includes('textile')) return '#3b82f6';
-      return '#64748b';
+    const s = String(sector || '').toLowerCase();
+    if (s.includes('steel')) return '#334155';
+    if (s.includes('energy')) return '#f43f5e';
+    if (s.includes('textile')) return '#3b82f6';
+    return '#64748b';
   };
 
   // --- Backend Logic ---
@@ -286,27 +286,27 @@ const GraphVisualization = () => {
     setShapleyLoading(true);
     setShapleyError(null);
     try {
-        const resp = await fetch('/api/calculate/shapley', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target_country: String(node.id).toUpperCase(), producer_ratio: Number(ratio) })
-        });
-        if (!resp.ok) throw new Error("API Error");
-        const data = await resp.json();
-        
-        const alloc = data?.allocations || {};
-        const meta = data?.meta || null;
-        
-        const arr = Object.entries(alloc).map(([k, v]) => ({
-            name: k, pct: Number(v), abs: meta?.total_emissions_tCO2 ? (Number(v)/100)*meta.total_emissions_tCO2 : null
-        })).sort((a,b) => b.pct - a.pct);
+      const resp = await fetch('/api/calculate/shapley', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_country: String(node.id).toUpperCase(), producer_ratio: Number(ratio) })
+      });
+      if (!resp.ok) throw new Error("API Error");
+      const data = await resp.json();
 
-        setShapleyData(arr);
-        setShapleyMeta(meta);
+      const alloc = data?.allocations || {};
+      const meta = data?.meta || null;
+
+      const arr = Object.entries(alloc).map(([k, v]) => ({
+        name: k, pct: Number(v), abs: meta?.total_emissions_tCO2 ? (Number(v) / 100) * meta.total_emissions_tCO2 : null
+      })).sort((a, b) => b.pct - a.pct);
+
+      setShapleyData(arr);
+      setShapleyMeta(meta);
     } catch (err) {
-        setShapleyError('Data unavailable.');
+      setShapleyError('Data unavailable.');
     } finally {
-        setShapleyLoading(false);
+      setShapleyLoading(false);
     }
   }, []);
 
@@ -322,40 +322,40 @@ const GraphVisualization = () => {
     if (!node) return;
     setHoverLink(null);
 
-    const connectedLinks = fullLinks.filter(link => 
+    const connectedLinks = fullLinks.filter(link =>
       link.source.id === node.id || link.target.id === node.id
     );
 
     const combinedLinks = [...visibleLinks, ...connectedLinks];
     const uniqueLinks = Array.from(new Map(combinedLinks.map(link => [link.source.id + "-" + link.target.id, link])).values());
-    
+
     setVisibleLinks(uniqueLinks);
     setGraphData(prev => ({ ...prev, links: uniqueLinks }));
     setSelectedNode(node);
-    
+
     if (fgRef.current) {
-        const distRatio = 1 + 300/Math.hypot(node.x, node.y, node.z);
-        fgRef.current.cameraPosition(
-          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-          node,
-          2000
-        );
+      const distRatio = 1 + 300 / Math.hypot(node.x, node.y, node.z);
+      fgRef.current.cameraPosition(
+        { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+        node,
+        2000
+      );
     }
   };
 
   const handleSearch = () => {
     setSearchMessage(null);
     const q = searchQuery.trim().toUpperCase();
-    if(!q) return;
+    if (!q) return;
     let node = graphData.nodes.find(n => n.id === q || n.iso3 === q);
     if (!node) node = graphData.nodes.find(n => n.label.toUpperCase().includes(q));
-    
+
     if (node) {
       setHoverNode(node);
       handleNodeClick(node);
       setSearchMessage(`Found: ${node.label}`);
     } else {
-        setSearchMessage("Not Found");
+      setSearchMessage("Not Found");
     }
   };
 
@@ -368,6 +368,13 @@ const GraphVisualization = () => {
       <div className="floating-actions">
         <button onClick={() => navigate('/')} className="action-btn back-btn">
           <span>←</span> Back to Dashboard
+        </button>
+        <button
+          onClick={() => navigate('/policy-lab')}
+          className="action-btn policy-btn"
+          style={{ backgroundColor: '#6366f1', borderColor: '#6366f1' }}
+        >
+          <span>🔬</span> Policy Lab
         </button>
         <button
           onClick={() => {
@@ -490,43 +497,43 @@ const GraphVisualization = () => {
 
       <ForceGraph3D
         ref={fgRef}
-        graphData={graphData} 
+        graphData={graphData}
         onNodeClick={handleNodeClick}
 
-        backgroundColor="rgba(0,0,0,0)" 
-        
+        backgroundColor="rgba(0,0,0,0)"
+
         width={window.innerWidth}
         height={window.innerHeight}
-        
+
         // --- THIS IS THE FIX: SIZE 2.5 (Goldilocks Zone) ---
-        nodeVal={node => Math.max(2.5, Math.sqrt(node.gdp_usd) / 7000)} 
-        
+        nodeVal={node => Math.max(2.5, Math.sqrt(node.gdp_usd) / 7000)}
+
         nodeColor={node => {
-          if (hoverNode && node.id === hoverNode.id) return '#00cec9'; 
-          return node.co2 > 80 ? '#6c5ce7' : '#00cec9'; 
+          if (hoverNode && node.id === hoverNode.id) return '#00cec9';
+          return node.co2 > 80 ? '#6c5ce7' : '#00cec9';
         }}
-        
+
         nodeLabel={node => `${node.label}: Risk ${node.co2.toFixed(1)}`}
-        nodeResolution={24} 
+        nodeResolution={24}
         nodeOpacity={0.9}
 
         linkVisibility={link => isLinkVisible(link)}
-        
+
         linkColor={link => {
           if (link === hoverLink) return '#00cec9';
           const s = (link.sector || '').toLowerCase();
-          if (s.includes('steel')) return '#2c3e50';   
-          if (s.includes('energy')) return '#a29bfe';  
-          if (s.includes('textile')) return '#74b9ff'; 
-          return '#b2bec3'; 
-        }} 
-        
-        linkWidth={link => {
-            if (link === hoverLink) return 3;
-            const val = link.primaryValue || 0;
-            return Math.max(1.5, Math.sqrt(val) / 20000); 
+          if (s.includes('steel')) return '#2c3e50';
+          if (s.includes('energy')) return '#a29bfe';
+          if (s.includes('textile')) return '#74b9ff';
+          return '#b2bec3';
         }}
-        
+
+        linkWidth={link => {
+          if (link === hoverLink) return 3;
+          const val = link.primaryValue || 0;
+          return Math.max(1.5, Math.sqrt(val) / 20000);
+        }}
+
         onLinkHover={handleLinkHover}
         onNodeHover={node => !hoverLink && setHoverNode(node || null)}
         showNavInfo={false}

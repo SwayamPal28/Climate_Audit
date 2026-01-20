@@ -15,11 +15,11 @@ const Dashboard = () => {
       try {
         const response = await fetch('/iso3_to_name_map.csv');
         if (!response.ok) throw new Error('Failed to load name map');
-        
+
         const csvText = await response.text();
         const data = d3.csvParse(csvText);
         const namesMap = {};
-        
+
         data.forEach(row => {
           if (row.iso3 && row['Country Name']) {
             namesMap[row.iso3.trim()] = row['Country Name'].trim();
@@ -41,7 +41,7 @@ const Dashboard = () => {
       try {
         setIsLoading(true);
         const response = await fetch('/api/audit/anomalies');
-        
+
         // Check if server returned 200 OK
         if (!response.ok) {
           const errorDetail = await response.text();
@@ -49,7 +49,7 @@ const Dashboard = () => {
         }
 
         const data = await response.json();
-        
+
         // Helper to normalize data from different potential column names
         const processData = (items) => items.map(item => {
           const iso = (item.iso3 || item.wb_code || '').trim();
@@ -121,7 +121,7 @@ const Dashboard = () => {
             <h2>Detected Anomalies</h2>
             <p>Top outlier countries based on GNN model prediction</p>
           </div>
-          
+
           <div className="table-container">
             <table>
               <thead>
@@ -163,6 +163,16 @@ const Dashboard = () => {
           </div>
           <Link to="/visualization" className="cta-button">
             Launch 3D Explorer
+          </Link>
+        </div>
+
+        <div className="visualization-cta" style={{ marginTop: '20px' }}>
+          <div className="cta-text">
+            <h3>Policy Simulator</h3>
+            <p>Run "What-If" scenarios: CBAM Carbon Tax, Technology Transfer, and Fairness Frameworks.</p>
+          </div>
+          <Link to="/policy-lab" className="cta-button" style={{ backgroundColor: '#6366f1' }}>
+            Launch Policy Lab
           </Link>
         </div>
       </div>

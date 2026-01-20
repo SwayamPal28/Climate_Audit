@@ -54,6 +54,28 @@ app.post('/api/calculate/shapley', async (req, res) => {
   }
 });
 
+// --- Policy simulation proxy ---
+app.post('/api/simulate/policy', async (req, res) => {
+  try {
+    const pythonResp = await axios.post(`${PY_HOST}/api/simulate/policy`, req.body, { timeout: 120000 });
+    res.json(pythonResp.data);
+  } catch (err) {
+    console.error('HTTP policy simulation error', err.message);
+    res.status(500).json({error: 'Policy simulation failed: ' + err.message});
+  }
+});
+
+// --- Graph data proxy (for consistency) ---
+app.get('/api/graph', async (req, res) => {
+  try {
+    const pythonResp = await axios.get(`${PY_HOST}/api/graph`);
+    res.json(pythonResp.data);
+  } catch (err) {
+    console.error('HTTP graph error', err.message);
+    res.status(500).json({error: 'Graph data fetch failed'});
+  }
+});
+
 // --- Serve React in production (optional) ---
 // Uncomment if you want Node to serve React build
 /*
