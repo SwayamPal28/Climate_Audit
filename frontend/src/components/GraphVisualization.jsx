@@ -83,7 +83,7 @@ const SidebarRoleTable = ({ targetNode, links, allLinks, getCountryName }) => {
         Trade Flow Analysis
       </div>
 
-      <div className="role-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div className="role-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '220px', overflowY: 'auto', paddingRight: '4px' }}>
         {sortedPartners.map((p, i) => (
           <div key={i} className="role-card" style={{ background: 'white', border: '1px solid #f0f3f8', borderRadius: '6px', padding: '10px 12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
 
@@ -94,23 +94,23 @@ const SidebarRoleTable = ({ targetNode, links, allLinks, getCountryName }) => {
               {(p.type === 'MIDDLEMAN_SUPPLY' || p.type === 'MIDDLEMAN_BUY') && p.chain ? (
                 <>
                   <span style={{ color: '#95a5a6' }}>{p.chain.origin}</span>
-                  <span style={{ margin: '0 6px', color: '#b2bec3', fontSize: '10px' }}>▶</span>
+                  <span style={{ margin: '0 6px', color: '#b2bec3', fontSize: '10px' }}>&rarr;</span>
                   <span style={{ color: '#e67e22', fontWeight: '700' }}>{p.chain.middle}</span>
-                  <span style={{ margin: '0 6px', color: '#b2bec3', fontSize: '10px' }}>▶</span>
+                  <span style={{ margin: '0 6px', color: '#b2bec3', fontSize: '10px' }}>&rarr;</span>
                   <span style={{ color: '#2c3e50' }}>{p.chain.destination}</span>
                 </>
               ) : p.type === 'DIRECT_SUPPLY' ? (
                 /* Scenario B: Direct Supply */
                 <>
                   <span style={{ color: '#2c3e50', fontWeight: '600' }}>{p.name}</span>
-                  <span style={{ margin: '0 6px', color: '#27ae60', fontSize: '10px' }}>▶</span> {/* Green Arrow */}
+                  <span style={{ margin: '0 6px', color: '#27ae60', fontSize: '10px' }}>&rarr;</span>
                   <span style={{ color: '#7f8c8d' }}>{targetNode.label}</span>
                 </>
               ) : (
                 /* Scenario C: Direct Buy */
                 <>
                   <span style={{ color: '#7f8c8d' }}>{targetNode.label}</span>
-                  <span style={{ margin: '0 6px', color: '#2980b9', fontSize: '10px' }}>▶</span> {/* Blue Arrow */}
+                  <span style={{ margin: '0 6px', color: '#2980b9', fontSize: '10px' }}>&rarr;</span>
                   <span style={{ color: '#2c3e50', fontWeight: '600' }}>{p.name}</span>
                 </>
               )}
@@ -119,11 +119,12 @@ const SidebarRoleTable = ({ targetNode, links, allLinks, getCountryName }) => {
             {/* ROW 2: DATA */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f9f9f9', paddingTop: '6px' }}>
               <div style={{ fontSize: '11px', color: '#95a5a6', display: 'flex', alignItems: 'center' }}>
-                <span style={{ marginRight: '6px' }}>{p.sector}</span>
+                {/* Clean emoji from sector name using regex */}
+                <span style={{ marginRight: '6px' }}>{(p.sector || '').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim()}</span>
               </div>
               <div style={{ fontSize: '12px', fontFamily: 'monospace', fontWeight: '600', color: '#34495e' }}>
                 ${(p.value / 1e9).toFixed(1)}B
-                {p.isRisk && <span title="High Carbon Risk" style={{ marginLeft: '4px', fontSize: '10px' }}>⚠️</span>}
+                {p.isRisk && <span title="High Carbon Risk" style={{ marginLeft: '4px', fontSize: '10px', color: '#dc2626', fontWeight: 'bold' }}>RISK</span>}
               </div>
             </div>
 
@@ -168,16 +169,23 @@ const GraphVisualization = () => {
 
   const getCountryName = useCallback((iso3) => isoToNameMap[iso3] || iso3, [isoToNameMap]);
 
-  // --- DATA LOADING ---
+  // --- DATA LOADING & SAFETY TIMEOUT ---
   useEffect(() => {
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      if (isMounted) setIsLoading(false);
+    }, 5000); // Safety timeout of 5 seconds
+
     const fetchData = async () => {
       try {
         const nameMap = await fetchCountryNameMap();
-        setIsoToNameMap(nameMap);
+        if (isMounted) setIsoToNameMap(nameMap);
 
         const response = await fetch('/api/graph');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
+
+        if (!isMounted) return;
 
         const cleanNodes = (data.nodes || []).map(node => {
           const iso3 = node.iso3 || node.id;
@@ -218,10 +226,12 @@ const GraphVisualization = () => {
       } catch (error) {
         console.error('Error loading graph:', error);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
+        clearTimeout(timer);
       }
     };
     fetchData();
+    return () => { isMounted = false; clearTimeout(timer); };
   }, []);
 
   // --- PHYSICS & ZOOM FIX (SPACIOUS LAYOUT) ---
@@ -277,10 +287,10 @@ const GraphVisualization = () => {
 
   const getSectorColor = (sector) => {
     const s = String(sector || '').toLowerCase();
-    if (s.includes('steel')) return '#334155';
-    if (s.includes('energy')) return '#f43f5e';
-    if (s.includes('textile')) return '#3b82f6';
-    return '#64748b';
+    if (s.includes('steel')) return '#7f8c8d'; // Grey
+    if (s.includes('energy')) return '#f1c40f'; // Yellow
+    if (s.includes('textile')) return '#ef4444'; // Red
+    return '#b2bec3'; // Pewter Grey
   };
 
   // --- Backend Logic ---
@@ -369,14 +379,53 @@ const GraphVisualization = () => {
   const handleSearch = () => {
     const q = searchQuery.trim().toUpperCase();
     if (!q) return;
-    let node = graphData.nodes.find(n => n.id === q || n.iso3 === q);
-    if (!node) node = graphData.nodes.find(n => n.label.toUpperCase().includes(q));
+
+    // --- NLP-LIKE LOGIC ---
+    const lowerQ = searchQuery.toLowerCase();
+
+    // 1. Sector Detection
+    const hasSteel = lowerQ.includes('steel');
+    const hasEnergy = lowerQ.includes('energy') || lowerQ.includes('power') || lowerQ.includes('oil') || lowerQ.includes('gas');
+    const hasTextile = lowerQ.includes('textile') || lowerQ.includes('clothing') || lowerQ.includes('fabric');
+
+    // If any sector mentioned, filter to ONLY that sector
+    if (hasSteel || hasEnergy || hasTextile) {
+      setActiveSectors({
+        steel: hasSteel,
+        energy: hasEnergy,
+        textiles: hasTextile
+      });
+    }
+
+    // 2. Country/Node Detection
+    // Remove sector keywords to find the country name
+    let cleanQ = lowerQ
+      .replace(/steel/g, '')
+      .replace(/energy/g, '')
+      .replace(/power/g, '')
+      .replace(/oil/g, '')
+      .replace(/gas/g, '')
+      .replace(/textile/g, '')
+      .replace(/clothing/g, '')
+      .replace(/fabric/g, '')
+      .trim().toUpperCase();
+
+    // If query was ONLY sector (e.g. "show steel"), cleanQ might be empty/short. 
+    // If so, just return after filtering.
+    if (cleanQ.length < 2) return;
+
+    // Search for node with filtered query
+    let node = graphData.nodes.find(n => n.id === cleanQ || n.iso3 === cleanQ);
+    if (!node) node = graphData.nodes.find(n => n.label.toUpperCase().includes(cleanQ));
 
     if (node) {
       setHoverNode(node);
       handleNodeClick(node);
     }
   };
+
+  // REMOVED: ResizeObserver logic which was causing blank screen issues.
+  // Using direct window dimensions as this is a full-width/height app.
 
   if (isLoading) return <div className="loading-container">Loading ClimaAuditX...</div>;
 
@@ -386,14 +435,7 @@ const GraphVisualization = () => {
       {/* Top Left: Navigation */}
       <div className="floating-actions">
         <button onClick={() => navigate('/')} className="action-btn back-btn">
-          <span>←</span> Back to Dashboard
-        </button>
-        <button
-          onClick={() => navigate('/policy-lab')}
-          className="action-btn policy-btn"
-          style={{ backgroundColor: '#6366f1', borderColor: '#6366f1' }}
-        >
-          <span>🔬</span> Policy Lab
+          Back to Dashboard
         </button>
         <button
           onClick={() => {
@@ -404,21 +446,22 @@ const GraphVisualization = () => {
             setSelectedNode(null);
             setShapleyData([]);
             setSearchQuery('');
+            setActiveSectors({ steel: true, energy: true, textiles: true }); // Reset sectors too
           }}
           className="action-btn clear-btn"
         >
-          <span>✕</span> Reset View
+          Reset View
         </button>
       </div>
 
-      {/* Top Center: Search */}
+      {/* Top Center: Smart Search */}
       <div className="search-bar-container">
         <input
           className="search-input"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-          placeholder="Search countries by name or ISO..."
+          placeholder="Try 'Steel in China' or 'Germany Energy'..."
         />
         <button onClick={handleSearch} className="search-btn">SEARCH</button>
       </div>
@@ -533,7 +576,7 @@ const GraphVisualization = () => {
         width={window.innerWidth}
         height={window.innerHeight}
 
-        // --- THIS IS THE FIX: SIZE 2.5 (Goldilocks Zone) ---
+        // --- SIZE 2.5 (Goldilocks Zone) ---
         nodeVal={node => Math.max(2.5, Math.sqrt(node.gdp_usd) / 7000)}
 
         nodeColor={node => {
@@ -548,16 +591,16 @@ const GraphVisualization = () => {
         linkVisibility={link => isLinkVisible(link)}
 
         linkColor={link => {
-          if (link === hoverLink) return '#00cec9';
+          if (link === hoverLink) return '#00cec9'; // Highlight color (cyan)
           const s = (link.sector || '').toLowerCase();
-          if (s.includes('steel')) return '#2c3e50';
-          if (s.includes('energy')) return '#a29bfe';
-          if (s.includes('textile')) return '#74b9ff';
+          if (s.includes('steel')) return '#7f8c8d'; // Grey
+          if (s.includes('energy')) return '#f1c40f'; // Yellow
+          if (s.includes('textile')) return '#ef4444'; // Red
           return '#b2bec3';
         }}
 
         linkWidth={link => {
-          if (link === hoverLink) return 3;
+          if (link === hoverLink) return 5; // Highlighted width
           const val = link.primaryValue || 0;
           return Math.max(1.5, Math.sqrt(val) / 20000);
         }}
@@ -569,6 +612,13 @@ const GraphVisualization = () => {
         warmupTicks={200} // Increased warmup for better spacing
         cooldownTicks={0}
       />
+
+      {!isLoading && graphData.nodes.length === 0 && (
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', color: '#64748b' }}>
+          <h2>No Graph Data Available</h2>
+          <p>The backend returned no supply chain nodes.</p>
+        </div>
+      )}
     </div>
   );
 };

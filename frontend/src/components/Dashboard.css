@@ -1,137 +1,242 @@
 .dashboard-container {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 2rem;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: #333;
-  line-height: 1.6;
+  /* Increased breathing room */
+  font-family: var(--font-sans);
+  color: var(--text-primary);
 }
 
 .dashboard-header {
   text-align: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #eaeaea;
+  margin-bottom: 3rem;
+  padding-bottom: 0;
+  /* Removed border for cleaner look */
 }
 
 .dashboard-header h1 {
-  font-size: 2rem;
-  color: #2c3e50;
+  font-size: 3rem;
+  /* Larger, more impactful */
+  font-family: var(--font-serif);
+  /* Serif for professional elegance */
+  color: var(--color-navy);
   margin-bottom: 0.5rem;
+  font-weight: 700;
 }
 
 .dashboard-header p {
-  color: #7f8c8d;
+  color: var(--text-secondary);
   font-size: 1.1rem;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
 }
 
 .dashboard-content {
-  margin-bottom: 2rem;
+  display: grid;
+  gap: 2rem;
+  /* Grid layout if needed, though simpler flex/flow works too */
 }
 
 .dashboard-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  padding: 1.5rem;
-  margin-bottom: 2rem;
+  background: var(--bg-card);
+  /* Solid White */
+  border: 1px solid rgba(47, 65, 86, 0.08);
+  /* Very subtle border */
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  margin-bottom: 1rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 20px -3px rgba(47, 65, 86, 0.1);
+}
+
+.table-header-info {
+  margin-bottom: 1.5rem;
+}
+
+.table-header-info h2 {
+  color: var(--color-navy);
+  font-family: var(--font-serif);
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.table-header-info p {
+  color: var(--text-secondary);
 }
 
 .table-container {
   overflow-x: auto;
-  max-height: 600px;
+  max-height: 500px;
   overflow-y: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-md);
+  background: #FFFFFF;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.95rem;
+  /* Slightly larger for readability */
 }
 
-th, td {
-  padding: 0.75rem 1rem;
+th,
+td {
+  padding: 1rem 1.25rem;
   text-align: left;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 th {
-  background-color: #f8f9fa;
+  background-color: var(--color-navy);
+  /* Navy Header */
+  color: #FFFFFF;
+  /* White Text */
   font-weight: 600;
-  color: #2c3e50;
   text-transform: uppercase;
-  font-size: 0.8rem;
-  letter-spacing: 0.5px;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
   position: sticky;
   top: 0;
-  background: #f8f9fa;
   z-index: 10;
 }
 
 tr:hover {
-  background-color: #f9f9f9;
+  background-color: var(--bg-main);
+  /* Light Beige Hover */
 }
 
-.positive {
-  color: #27ae60;
+.score-positive {
+  color: #ef4444;
+  /* Keep semantic RED for anomalies */
+  font-family: var(--font-mono);
   font-weight: 600;
 }
 
-.negative {
-  color: #e74c3c;
+.score-negative {
+  color: var(--color-teal);
+  /* Use Teal/Green for efficiency/good */
+  font-family: var(--font-mono);
   font-weight: 600;
 }
 
-.visualization-cta {
-  text-align: center;
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: #f8f9fa;
-  border-radius: 8px;
+/* Visualization CTA Cards */
+/* Navigation Bar */
+.dashboard-nav {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
 }
 
-.visualization-cta h3 {
-  margin-top: 0;
-  color: #2c3e50;
-  font-size: 1.25rem;
-  margin-bottom: 0.5rem;
-}
-
-.visualization-cta p {
-  color: #7f8c8d;
-  margin-bottom: 1rem;
-}
-
-.cta-button {
-  display: inline-block;
-  background-color: #3498db;
-  color: white;
-  padding: 0.7rem 1.5rem;
-  border-radius: 4px;
+.nav-button {
+  background-color: var(--color-teal);
+  color: white !important;
+  padding: 0.8rem 2rem;
+  border-radius: 50px;
   text-decoration: none;
   font-weight: 600;
-  transition: background-color 0.3s;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(86, 124, 141, 0.2);
 }
 
-.cta-button:hover {
-  background-color: #2980b9;
+.nav-button:hover {
+  background-color: var(--color-navy);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(47, 65, 86, 0.2);
+}
+
+/* Feature Grid */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.feature-card {
+  background: var(--bg-card);
+  /* White */
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  border: 1px solid rgba(47, 65, 86, 0.05);
+  /* very subtle border */
+  text-align: left;
+  transition: transform 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+}
+
+.feature-card h3 {
+  color: var(--color-navy);
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  line-height: 1.3;
+}
+
+.feature-card p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Responsive adjustments for Feature Grid */
+@media (max-width: 1024px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dashboard-footer {
   text-align: center;
-  padding: 1.5rem;
-  margin-top: 2rem;
-  border-top: 1px solid #eaeaea;
-  color: #7f8c8d;
-  font-size: 0.9rem;
+  padding: 2rem;
+  margin-top: 3rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  color: var(--text-muted);
+  font-size: 0.85rem;
 }
 
 .loading {
   text-align: center;
-  padding: 2rem;
+  padding: 4rem;
   font-size: 1.2rem;
-  color: #7f8c8d;
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+.error-display {
+  text-align: center;
+  padding: 3rem;
+  background: #FFF5F5;
+  border-radius: var(--radius-lg);
+  border: 1px solid #FED7D7;
+}
+
+.error-display h2 {
+  color: #C53030;
+}
+
+.error-display button {
+  background: #C53030;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 /* Responsive adjustments */
@@ -139,13 +244,19 @@ tr:hover {
   .dashboard-container {
     padding: 1rem;
   }
-  
+
   .dashboard-header h1 {
-    font-size: 1.5rem;
+    font-size: 2rem;
   }
-  
-  th, td {
-    padding: 0.6rem 0.8rem;
-    font-size: 0.9rem;
+
+  .visualization-cta {
+    flex-direction: column;
+    text-align: center;
+    gap: 1.5rem;
+  }
+
+  th,
+  td {
+    padding: 0.75rem;
   }
 }

@@ -116,7 +116,44 @@ const Dashboard = () => {
       </header>
 
       <div className="dashboard-content">
-        <div className="dashboard-card">
+
+        {/* 1. Top Navigation Bar */}
+        <nav className="dashboard-nav">
+          <Link to="/visualization" className="nav-button">
+            3D Explorer
+          </Link>
+          <Link to="/policy-lab" className="nav-button">
+            Policy Lab
+          </Link>
+          <Link to="/diplomacy" className="nav-button">
+            Diplomacy Sandbox
+          </Link>
+        </nav>
+
+        {/* 2. Feature Highlights (Soft & Crisp Explanations) */}
+        <div className="feature-grid">
+          <div className="feature-card">
+            <h3>Network Dependency Analysis</h3>
+            <p>
+              Uncover the hidden architecture of global trade. Our 3D models trace how carbon flows through supply chains, revealing dependencies often missed by standard audits.
+            </p>
+          </div>
+          <div className="feature-card">
+            <h3>Policy Impact Assessment</h3>
+            <p>
+              Foresight is better than hindsight. Simulate the economic ripples of carbon taxes and treaties to understand real-world consequences before implementation.
+            </p>
+          </div>
+          <div className="feature-card">
+            <h3>Multilateral Negotiation Simulator</h3>
+            <p>
+              Test your climate strategies against AI-driven nations. Experience how policies survive—or fail—in a realistic landscape of competing geopolitical interests.
+            </p>
+          </div>
+        </div>
+
+        {/* 3. Anomalies Table */}
+        <div className="dashboard-card main-data-card">
           <div className="table-header-info">
             <h2>Detected Anomalies</h2>
             <p>Top outlier countries based on GNN model prediction</p>
@@ -154,36 +191,6 @@ const Dashboard = () => {
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div className="visualization-cta">
-          <div className="cta-text">
-            <h3>Interactive Analysis</h3>
-            <p>Dive into the relationship between these countries in a 3D Graph visualization.</p>
-          </div>
-          <Link to="/visualization" className="cta-button">
-            Launch 3D Explorer
-          </Link>
-        </div>
-
-        <div className="visualization-cta" style={{ marginTop: '20px' }}>
-          <div className="cta-text">
-            <h3>Policy Simulator</h3>
-            <p>Run "What-If" scenarios: CBAM Carbon Tax, Technology Transfer, and Fairness Frameworks.</p>
-          </div>
-          <Link to="/policy-lab" className="cta-button" style={{ backgroundColor: '#6366f1' }}>
-            Launch Policy Lab
-          </Link>
-        </div>
-
-        <div className="visualization-cta" style={{ marginTop: '20px' }}>
-          <div className="cta-text">
-            <h3>⚔️ Diplomatic War Room</h3>
-            <p>Test policies against AI opponents. See how countries retaliate in real-time game scenarios.</p>
-          </div>
-          <Link to="/diplomacy" className="cta-button" style={{ backgroundColor: '#ef4444' }}>
-            Enter Sandbox (BETA)
-          </Link>
         </div>
       </div>
     </div>

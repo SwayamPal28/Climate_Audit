@@ -6,6 +6,10 @@ import numpy as np
 class DiplomaticAgent:
     """
     AI Agent that remembers negotiation history and adapts strategy.
+    
+    NOTE: This uses heuristic decision rules based on Game Theory principles
+    (Tit-for-Tat, Reciprocity) rather than deep Reinforcement Learning.
+    The "learning" is simulated through history tracking and persona adaptation.
     """
     def __init__(self, iso, persona="BALANCED"):
         self.iso = iso
@@ -74,12 +78,18 @@ class DiplomaticAgent:
         # Base reaction matches damage
         base_tariff = (incoming_damage_usd / target_sector['value'])
         
-        # Apply Persona Multiplier
-        multiplier = 1.0
-        if self.persona == "GROWTH_FOCUSED":
-            multiplier = 1.5 if round_num < self.patience else 0.8  # Aggressive start, then compromise
-        elif self.persona == "CLIMATE_FOCUSED":
-            multiplier = 0.8  # Always lenient on trade war
+        # Apply Persona Multiplier using defined Utility Weights
+        # (GDP focus increases retaliation, Stability focus decreases it)
+        gdp_weight = self.weights.get("gdp", 1.0)
+        stability_weight = self.weights.get("stability", 1.0)
+        
+        # Aggression factor: Higher GDP weight relative to Stability = More Aggressive
+        aggression_score = gdp_weight / stability_weight if stability_weight > 0 else 2.0
+        
+        multiplier = aggression_score * (1.5 if round_num < self.patience else 0.8)
+        
+        # Cap multiplier to reasonable bounds [0.5, 2.0]
+        multiplier = max(0.5, min(2.0, multiplier))
             
         final_tariff = min(0.50, base_tariff * multiplier)
         

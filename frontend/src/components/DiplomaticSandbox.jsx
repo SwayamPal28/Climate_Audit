@@ -6,7 +6,7 @@ import LLMAnalystPanel from './LLMAnalystPanel';
 
 const DiplomaticSandbox = () => {
   const navigate = useNavigate();
-  const [config, setConfig] = useState({ player: 'USA', rival: 'CAN', sector: 'Energy' });
+  const [config, setConfig] = useState({ player: 'USA', rival: 'CHN', sector: 'Energy' });
   const [gameData, setGameData] = useState(null);
   const [turnHistory, setTurnHistory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -15,9 +15,9 @@ const DiplomaticSandbox = () => {
   // LLM Analysis state
   const [latestTurnForAnalysis, setLatestTurnForAnalysis] = useState(null);
 
-  // Policy preferences (both sliders now editable)
+  // Policy preferences
   const [playerPreference, setPlayerPreference] = useState(76); // 76% carbon priority
-  const [rivalPreference, setRivalPreference] = useState(70); // 70% carbon priority
+  const [rivalPreference, setRivalPreference] = useState(70); // 70% aggressiveness
 
   // Available countries
   const countries = [
@@ -39,39 +39,33 @@ const DiplomaticSandbox = () => {
     { value: 'Textiles', label: 'Textiles' }
   ];
 
-  const initializeGame = async () => {
+  const initializeGame = React.useCallback(async (playerIso, rivalIso) => {
     setLoading(true);
     try {
       const res = await axios.post('http://localhost:8000/api/diplomacy/start', {
-        player_iso: config.player,
-        rival_iso: config.rival
+        player_iso: playerIso,
+        rival_iso: rivalIso
       });
       setGameData(res.data);
       setTurnHistory([]);
       setEquilibriumFound(false);
 
-      // Set default sector if available
       if (res.data.rival.vulnerabilities.length > 0) {
-        setConfig({ ...config, sector: res.data.rival.vulnerabilities[0].sector });
+        setConfig(prev => ({ ...prev, sector: res.data.rival.vulnerabilities[0].sector }));
       }
     } catch (err) {
       alert("Failed to initialize: " + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Initialize on mount or when countries change
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
-    initializeGame();
-  }, [config.player, config.rival]);
+    initializeGame(config.player, config.rival);
+  }, [initializeGame, config.player, config.rival]);
 
   const playTurn = async () => {
-    // Calculate severity based on player preference slider
-    // Higher carbon priority = higher tariff
-    const severity = playerPreference / 100; // Convert 0-100 to 0-1
-
+    const severity = playerPreference / 100;
     setLoading(true);
     try {
       const res = await axios.post('http://localhost:8000/api/diplomacy/turn', {
@@ -82,7 +76,6 @@ const DiplomaticSandbox = () => {
         severity: severity
       });
 
-      // Add to history
       const newTurn = {
         round: turnHistory.length + 1,
         playerTariff: severity * 100,
@@ -97,7 +90,6 @@ const DiplomaticSandbox = () => {
 
       setTurnHistory([...turnHistory, newTurn]);
 
-      // Prepare for LLM analysis
       setLatestTurnForAnalysis({
         player_iso: config.player,
         rival_iso: config.rival,
@@ -105,11 +97,9 @@ const DiplomaticSandbox = () => {
         ai_persona: gameData?.rival?.persona || 'BALANCED'
       });
 
-      // Check for equilibrium based on AI action
       if (res.data.round_summary.ai_reaction.action === "STABILIZE") {
         setEquilibriumFound(true);
       } else {
-        // Also check if tariffs are converging
         const diff = Math.abs(severity - (res.data.round_summary.ai_reaction.tariff_rate || 0));
         if (diff < 0.05 && turnHistory.length > 2) {
           setEquilibriumFound(true);
@@ -123,280 +113,195 @@ const DiplomaticSandbox = () => {
     }
   };
 
-  const getLatestTurn = () => {
-    return turnHistory.length > 0 ? turnHistory[turnHistory.length - 1] : null;
-  };
-
-  const latestTurn = getLatestTurn();
+  const latestTurn = turnHistory.length > 0 ? turnHistory[turnHistory.length - 1] : null;
 
   return (
-    <div className="sandbox-glass-container">
-      {/* Header */}
-      <div className="glass-header">
-        <button onClick={() => navigate('/')} className="glass-back-btn">
-          ← Back to Dashboard
-        </button>
-        <div className="header-content">
-          <h1>Diplomatic AI Sandbox</h1>
-          <span className="research-badge-glass">RESEARCH GRADE</span>
-        </div>
-        <p className="header-subtitle-glass">
-          Find Nash Equilibrium policies using game theory – where neither country benefits from changing policy unilaterally
-        </p>
-      </div>
-
-      <div className="game-glass-container">
-        {/* Left Panel: Negotiating Countries */}
-        <div className="glass-card left-panel-glass">
-          <h3>Negotiating Countries</h3>
-
-          <div className="country-card-glass">
-            <div className="country-label-glass">Country A (Initiator)</div>
-            <select
-              value={config.player}
-              onChange={e => setConfig({ ...config, player: e.target.value })}
-              className="glass-select-sm"
-            >
-              {countries.map(c => (
-                <option key={c.code} value={c.code}>{c.name}</option>
-              ))}
-            </select>
-            <div className="country-hint-glass">Wants to reduce carbon emissions</div>
+    <div className="diplomatic-container">
+      {/* 1. LEFT SIDEBAR - COMMAND PANEL */}
+      <aside className="diplomatic-sidebar">
+        <div className="sidebar-header">
+          <div className="lab-title">
+            DIPLOMACY LAB
           </div>
-
-          <div className="vs-indicator-glass">VS</div>
-
-          <div className="country-card-glass">
-            <div className="country-label-glass">Country B (Responder)</div>
-            <select
-              value={config.rival}
-              onChange={e => setConfig({ ...config, rival: e.target.value })}
-              className="glass-select-sm"
-            >
-              {countries.map(c => (
-                <option key={c.code} value={c.code}>{c.name}</option>
-              ))}
-            </select>
-            <div className="country-hint-glass">Protects economic interests</div>
-          </div>
-
-          <div className="sector-card-glass">
-            <div className="sector-label-glass">Trade Sector</div>
-            <select
-              value={config.sector}
-              onChange={e => setConfig({ ...config, sector: e.target.value })}
-              className="glass-select-sm"
-            >
-              {sectors.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="preferences-glass">
-            <h4>Policy Preferences</h4>
-
-            <div className="preference-item-glass">
-              <div className="pref-header-glass">
-                <span>{config.player} - Carbon Tax Rate</span>
-                <span className="pref-value-glass">{playerPreference}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={playerPreference}
-                onChange={e => setPlayerPreference(e.target.value)}
-                className="glass-range"
-              />
-              <div className="range-labels-glass">
-                <span>0% (No Tax)</span>
-                <span>100% (Maximum)</span>
-              </div>
-              <div className="preference-explanation">
-                This slider controls the carbon tax rate you propose on {config.sector} imports from {config.rival}.
-              </div>
-            </div>
-
-            <div className="preference-item-glass">
-              <div className="pref-header-glass">
-                <span>{config.rival} - AI Aggressiveness</span>
-                <span className="pref-value-glass">{rivalPreference}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={rivalPreference}
-                onChange={e => setRivalPreference(e.target.value)}
-                className="glass-range"
-              />
-              <div className="range-labels-glass">
-                <span>Passive</span>
-                <span>Aggressive</span>
-              </div>
-              <div className="preference-explanation">
-                Controls how aggressively the AI retaliates (currently for visualization only).
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={() => playTurn()}
-            disabled={loading}
-            className="glass-btn-primary"
-          >
-            {loading ? "Calculating..." : "Run Simulation"}
+          <button onClick={() => navigate('/')} className="back-link">
+            &larr; Exit to Dashboard
           </button>
         </div>
 
-        {/* Right Panel: Results */}
-        <div className="right-panel-glass">
-          {/* Nash Equilibrium Card */}
-          <div className="glass-card equilibrium-card-glass">
-            {equilibriumFound && (
-              <div className="eq-badge-glass eq-found">
-                Nash Equilibrium Found
-              </div>
-            )}
+        <div className="sidebar-controls">
+          <div className="control-section-title">Negotiation Setup</div>
 
-            {!equilibriumFound && turnHistory.length > 0 && (
-              <div className="eq-badge-glass eq-searching">
-                Searching for Equilibrium...
+          <div className="config-card">
+            <div className="input-group">
+              <label>Initiator (You)</label>
+              <select
+                value={config.player}
+                onChange={e => setConfig({ ...config, player: e.target.value })}
+                className="control-select"
+              >
+                {countries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+              </select>
+            </div>
+
+            <div className="vs-divider">VS</div>
+
+            <div className="input-group">
+              <label>Responder (AI)</label>
+              <select
+                value={config.rival}
+                onChange={e => setConfig({ ...config, rival: e.target.value })}
+                className="control-select"
+              >
+                {countries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label>Trade Sector</label>
+            <select
+              value={config.sector}
+              onChange={e => setConfig({ ...config, sector: e.target.value })}
+              className="control-select"
+            >
+              {sectors.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+
+          <div className="control-section-title" style={{ marginTop: '24px' }}>Strategic Levers</div>
+
+          <div className="slider-container">
+            <div className="slider-header">
+              <span>Proposed Tariff / Tax</span>
+              <span className="slider-value">{playerPreference}%</span>
+            </div>
+            <input
+              type="range"
+              className="chunky-slider"
+              min="0" max="100"
+              value={playerPreference}
+              onChange={e => setPlayerPreference(e.target.value)}
+            />
+          </div>
+
+          <div className="slider-container">
+            <div className="slider-header">
+              <span>AI Aggressiveness</span>
+              <span className="slider-value">{rivalPreference}%</span>
+            </div>
+            <input
+              type="range"
+              className="chunky-slider"
+              min="0" max="100"
+              value={rivalPreference}
+              onChange={e => setRivalPreference(e.target.value)}
+            />
+          </div>
+
+          <button className="run-btn" onClick={playTurn} disabled={loading}>
+            {loading ? 'Simulating Round...' : 'Run Negotiation Round'}
+          </button>
+
+        </div>
+      </aside>
+
+      {/* 2. MAIN WORKSPACE */}
+      <main className="diplomatic-workspace">
+        <div className="workspace-header">
+          <div className="header-title">Nash Equilibrium Finder</div>
+          <div className="research-grade-badge">RESEARCH GRADE</div>
+        </div>
+
+        <div className="diplomatic-content">
+          {/* Equilibrium Status Card */}
+          <div className="equilibrium-status-card">
+            {equilibriumFound ? (
+              <div className="status-header found">STATUS: NASH EQUILIBRIUM ESTABLISHED</div>
+            ) : (
+              <div className="status-header searching">
+                {turnHistory.length > 0 ? "STATUS: SEARCHING FOR STABILITY..." : "STATUS: READY TO NEGOTIATE"}
               </div>
             )}
 
             {latestTurn ? (
-              <div className="eq-results-glass">
-                <div className="eq-cards-glass">
-                  <div className="eq-card-glass player-eq">
-                    <div className="eq-country-glass">{config.player}</div>
-                    <div className="eq-label-glass">CARBON TAX</div>
-                    <div className="eq-value-glass">{latestTurn.playerTariff.toFixed(1)}%</div>
-                  </div>
-
-                  <div className="eq-arrows-glass">⇄</div>
-
-                  <div className="eq-card-glass rival-eq">
-                    <div className="eq-country-glass">{config.rival}</div>
-                    <div className="eq-label-glass">RETALIATORY TARIFF</div>
-                    <div className="eq-value-glass">{latestTurn.aiTariff.toFixed(2)}%</div>
-                  </div>
-                </div>
-
-                <div className="ai-response-glass">
-                  <strong>AI Response:</strong> {latestTurn.aiDescription}
-                  <span className={`tension-badge-glass tension-${latestTurn.tension?.toLowerCase()}`}>
-                    {latestTurn.tension}
-                  </span>
-                </div>
-
-                <div className="metrics-glass-grid">
-                  <div className="metric-glass carbon-metric">
-                    <div className="metric-label-glass">CARBON SAVED</div>
-                    <div className="metric-value-glass">0.07 tCO2</div>
-                    <div className="metric-explanation">Estimated reduction in emissions from reduced trade volume</div>
-                  </div>
-
-                  <div className="metric-glass trade-metric">
-                    <div className="metric-label-glass">TRADE RETENTION</div>
-                    <div className="metric-value-glass">72.3%</div>
-                    <div className="metric-explanation">Percentage of original trade volume maintained after tariffs</div>
-                  </div>
-
-                  <div className="metric-glass gdp-metric">
-                    <div className="metric-label-glass">{config.player} GDP LOSS</div>
-                    <div className="metric-value-glass">
-                      ${(latestTurn.playerDamage / 1e6).toFixed(1)}M
+              <div className="eq-dashboard">
+                <div className="stats-row">
+                  <div className="eq-player-stats">
+                    <div className="eq-country">{config.player}</div>
+                    <div className="eq-big-metric">
+                      <span className="metric-label">TARIFF</span>
+                      <span className="metric-val">{latestTurn.playerTariff.toFixed(1)}%</span>
                     </div>
-                    <div className="metric-explanation">Economic damage from reduced exports to {config.rival}</div>
-                  </div>
-
-                  <div className="metric-glass gdp-metric">
-                    <div className="metric-label-glass">{config.rival} GDP LOSS</div>
-                    <div className="metric-value-glass">
-                      ${(latestTurn.aiDamage / 1e6).toFixed(1)}M
+                    <div className="eq-damage-metric">
+                      <span className="label">GDP IMPACT</span>
+                      <span className="negative">-${(latestTurn.playerDamage / 1e6).toFixed(1)}M</span>
                     </div>
-                    <div className="metric-explanation">Economic damage from retaliatory tariffs on {config.player}</div>
+                  </div>
+
+                  <div className="eq-center-interaction">
+                    <div className="interaction-divider"></div>
+                    <div className={`tension-pill ${latestTurn.tension || 'LOW'}`}>
+                      {latestTurn.tension || 'LOW TENSION'}
+                    </div>
+                  </div>
+
+                  <div className="eq-player-stats">
+                    <div className="eq-country">{config.rival}</div>
+                    <div className="eq-big-metric">
+                      <span className="metric-label">RETALIATION</span>
+                      <span className="metric-val">{latestTurn.aiTariff.toFixed(1)}%</span>
+                    </div>
+                    <div className="eq-damage-metric">
+                      <span className="label">GDP IMPACT</span>
+                      <span className="negative">-${(latestTurn.aiDamage / 1e6).toFixed(1)}M</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="explanation-glass">
-                  <h4>Why This Is Optimal:</h4>
-                  <p>
-                    {equilibriumFound
-                      ? "Neither country can significantly improve their position by changing policy unilaterally. This represents a stable Nash Equilibrium where both countries have reached their best response to each other's strategies."
-                      : "The simulation is converging towards a stable equilibrium point. The AI agent is adjusting its retaliation strategy based on the economic damage received. Continue iterations to find the optimal policy balance."}
-                  </p>
-                </div>
-
-                <div className="iteration-count-glass">
-                  Converged in {turnHistory.length} iteration{turnHistory.length !== 1 ? 's' : ''}
+                <div className="ai-rationale-box">
+                  <strong>AI Strategy:</strong> {latestTurn.aiDescription}
                 </div>
               </div>
             ) : (
-              <div className="placeholder-glass">
-                <div className="placeholder-icon-glass">🎯</div>
-                <h3>Ready to Find Equilibrium</h3>
-                <p>Adjust the carbon tax rate slider and click "Run Simulation" to start.</p>
-                <div className="info-glass">
-                  <strong>How the simulation works:</strong>
-                  <ul>
-                    <li><strong>Step 1:</strong> Adjust the slider to set your proposed carbon tax rate</li>
-                    <li><strong>Step 2:</strong> Click "Run Simulation" to apply the policy</li>
-                    <li><strong>Step 3:</strong> The AI evaluates damage using real bilateral trade data</li>
-                    <li><strong>Step 4:</strong> The AI retaliates based on its persona and negotiation history</li>
-                    <li><strong>Step 5:</strong> Keep running simulations - the AI will adapt and eventually stabilize</li>
-                  </ul>
-                </div>
+              <div className="empty-state-message">
+                Configure the negotiation parameters on the left and click "Run Negotiation Round" to begin the game theory simulation.
               </div>
             )}
           </div>
 
-          {/* Negotiation Timeline */}
+          {/* Timeline */}
           {turnHistory.length > 0 && (
-            <div className="glass-card timeline-card-glass">
-              <h3>Negotiation Timeline</h3>
-              <p className="timeline-subtitle-glass">
-                Historical record of policy proposals and retaliatory responses
-              </p>
-
-              <div className="timeline-list-glass">
-                {turnHistory.slice(0, 10).map((turn, idx) => (
-                  <div key={idx} className="timeline-item-glass">
-                    <div className="round-badge-glass">Round {turn.round}</div>
-                    <div className="timeline-values-glass">
-                      <span className="player-value-glass">
-                        {config.player}: {turn.playerTariff.toFixed(1)}%
-                      </span>
-                      <span className="rival-value-glass">
-                        {config.rival}: {turn.aiTariff.toFixed(1)}%
-                      </span>
+            <div className="timeline-section">
+              <h3>Negotiation History</h3>
+              <div className="timeline-scroll">
+                {turnHistory.map((turn, idx) => (
+                  <div key={idx} className={`timeline-card ${turn.aiAction === 'RETALIATE' ? 'action-retaliate' : 'action-stabilize'}`}>
+                    <div className="round-number">Rd {turn.round}</div>
+                    <div className="timeline-metrics">
+                      <div>{config.player}: {turn.playerTariff.toFixed(0)}%</div>
+                      <div>{config.rival}: {turn.aiTariff.toFixed(0)}%</div>
                     </div>
-                    <span className="timeline-action-glass">{turn.aiAction}</span>
+                    <div className="timeline-action">{turn.aiAction}</div>
                   </div>
                 ))}
-                {turnHistory.length > 10 && (
-                  <div className="timeline-item-glass more-rounds-glass">
-                    <div className="round-badge-glass">...</div>
-                    <span className="more-text-glass">+{turnHistory.length - 10} more iterations</span>
-                  </div>
-                )}
               </div>
             </div>
           )}
 
-          {/* LLM Analysis Panel */}
+          {/* LLM Panel attached at bottom of workspace */}
           {latestTurnForAnalysis && (
-            <LLMAnalystPanel
-              analysisType="diplomatic"
-              simulationData={latestTurnForAnalysis}
-              autoTrigger={true}
-              collapsed={false}
-            />
+            <div className="diplomatic-llm-container">
+              <LLMAnalystPanel
+                analysisType="diplomatic"
+                simulationData={latestTurnForAnalysis}
+                autoTrigger={true}
+                collapsed={false}
+              />
+            </div>
           )}
+
         </div>
-      </div>
+      </main>
     </div>
   );
 };

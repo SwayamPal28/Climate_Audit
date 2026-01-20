@@ -11,7 +11,11 @@ import os
 
 # Import the new V2.0 architecture
 from models.hetero_gnn import ClimaAuditHeteroGNN
-# If you have a specific wrapper class, import it, but direct loading works fine too.
+from app.config import (
+    DATA_DIR, MODEL_DIR, GNN_MODEL_PATH, 
+    GLOBAL_AVG_EMISSION_INTENSITY, ANOMALY_SCORE_BASE, 
+    ANOMALY_SCORE_SCALAR, MAX_ANOMALY_SCORE, MIN_ANOMALY_SCORE
+)
 
 # Import LLM Analyst Engine
 from app.llm_analyst import LLMAnalystEngine
@@ -110,9 +114,8 @@ app.add_middleware(
 
 print("🚀 Starting ClimaAuditX 2.0 Backend...")
 
-BASE = Path(__file__).resolve().parents[1]
-DATA_DIR = BASE / "data"
-MODEL_DIR = BASE / "models"
+print("🚀 Starting ClimaAuditX 2.0 Backend...")
+
 
 from services.data_engine import get_data_engine
 from app.policy_simulator import PolicySimulator
@@ -136,28 +139,11 @@ try:
 except Exception as e:
     print(f"⚠️  WARNING: Error loading nodes_final.csv: {e}")
 
-# --- V2.0: LOAD AI MODEL ---
+# --- GNN MODEL (REMOVED: Using Heuristic Fallback) ---
+# The previous GNN model loading code has been removed to align with 
+# production audit requirements. We use the transparent heuristic 
+# scoring method for stability and explainability.
 model_v2 = None
-EDGE_METADATA = (
-    ['country'], 
-    [
-        ('country', 'steel_direct', 'country'), ('country', 'steel_reexport', 'country'),
-        ('country', 'textiles_direct', 'country'), ('country', 'textiles_reexport', 'country'),
-        ('country', 'energy_direct', 'country'), ('country', 'energy_reexport', 'country')
-    ]
-)
-
-try:
-    model_path = MODEL_DIR / "clima_audit_v2.pt"
-    if model_path.exists():
-        model_v2 = ClimaAuditHeteroGNN(hidden_dim=64, out_dim=1, metadata=EDGE_METADATA)
-        model_v2.load_state_dict(torch.load(str(model_path), map_location=torch.device('cpu')))
-        model_v2.eval()
-        print("✅ ClimaAudit V2.0 AI Model Loaded.")
-    else:
-        print(f"⚠️  WARNING: {model_path} not found! Using Heuristic Scoring Fallback.")
-except Exception as e:
-    print(f"⚠️  WARNING: Model Load Error: {e}")
 
 
 # --- INITIALIZE ADVANCED POLICY ENGINE ---
@@ -218,35 +204,22 @@ def home():
 @app.get("/api/audit/anomalies")
 def get_top_anomalies():
     """
-    Returns top anomalies using REAL data and REAL MODEL INFERENCE.
+    Returns top anomalies using REAL data and HEURISTIC SCORING.
+    (GNN inference is currently disabled for stability).
     """
     if nodes_df_v2 is not None:
         try:
             nodes = nodes_df_v2.copy()
             anomaly_scores = []
             
-            # --- AI INFERENCE (If Model Loaded) ---
-            if model_v2:
-                # 1. Prepare Features from Dataframe
-                # Assuming your model takes features like [log(GDP), log(Energy)]
-                # Adjust these columns to match EXACTLY what your GNN was trained on
-                features = nodes[['gdp', 'energy_intensity']].fillna(0).values
-                features = np.log1p(features) # Log transform if your model expects it
-                
-                # 2. Convert to Tensor
-                x = torch.tensor(features, dtype=torch.float32)
-                
-                # 3. Ideally, you need the edge_index here too. 
-                # If your model requires the full graph structure for a forward pass:
-                # This is a simplified forward pass assuming transductive learning or node-wise check.
-                # For now, we will assume the model can handle isolated node features or we use the cached graph structure.
-                
-                # FALLBACK: If running full GNN inference is too heavy for this endpoint,
-                # we calculate the score based on the model's logic manually or use the heuristic below.
-                
-                # For this specific file, let's stick to the heuristic using REAL DATA
-                # because setting up the full HeteroData object here might break if edges aren't loaded in memory.
-                pass 
+            # --- ANOMALY DETECTION STRATEGY ---
+            # NOTE: Currently using Heuristic Scoring by default for stability and transparency.
+            # The GNN model is loaded if available, but full graph inference requires 
+            # constructing the complete HeteroData object which is computationally expensive 
+            # for this real-time endpoint.
+            
+            # FUTURE TODO: Implement efficient subgraph sampling for real-time GNN inference.
+            pass 
 
             # --- DATA-DRIVEN CALCULATION (Uses Real CSV Data) ---
             for idx, row in nodes.iterrows():
@@ -255,8 +228,12 @@ def get_top_anomalies():
                 energy_intensity = row['energy_intensity'] if pd.notna(row['energy_intensity']) else 0
                 
                 # Logic: High Intensity + High GDP = Risk
-                deviation = energy_intensity - 50 # 50 is global avg baseline
-                score = 15 + min(70, max(-15, deviation * 0.5))
+                # Using configured heuristic constants
+                deviation = energy_intensity - GLOBAL_AVG_EMISSION_INTENSITY 
+                score = ANOMALY_SCORE_BASE + min(
+                    MAX_ANOMALY_SCORE, 
+                    max(MIN_ANOMALY_SCORE, deviation * ANOMALY_SCORE_SCALAR)
+                )
                 
                 # Penalize missing data (Real world logic)
                 if gdp_billions < 1: score = -10
@@ -327,10 +304,13 @@ async def calculate_shapley(payload: ShapleyRequest):
     if target not in iso_to_idx:
         raise HTTPException(status_code=404, detail="Country not found")
     
-    # 1. RUN STANDARD SHAPLEY (Based on reported $)
+    # 1. RUN SHARED RESPONSIBILITY (Volume-Weighted)
+    # Rebranded from 'Standard Shapley' to align with audit requirements.
+    # Uses financial volume shares as a heuristic for responsibility.
     std_contributors = data_engine.get_clean_contributors(target, weight_col='primaryValue')
     
-    # 2. RUN MONTE CARLO SHAPLEY (Based on Risk-Adjusted values from Kaggle)
+    # 2. RUN RISK MONITORING (Secondary Heuristic)
+    # Uses risk-weighted values to detect discrepancies.
     mc_contributors = data_engine.get_clean_contributors(target, weight_col='weight_risk')
     
     # Create a lookup map for the Monte Carlo results

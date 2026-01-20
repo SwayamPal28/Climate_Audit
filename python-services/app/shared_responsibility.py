@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 
-class ShapleyEngine:
+class SharedResponsibilityEngine:
     def __init__(self, gnn_wrapper, nodes_df, edges_df):
         self.gnn = gnn_wrapper
         self.nodes = nodes_df
@@ -11,8 +11,13 @@ class ShapleyEngine:
 
     def run_shapley(self, target_iso3: str, producer_ratio: float = 0.6):
         """
-        Implements a Shared Responsibility policy.
-
+        Implements a Shared Responsibility policy (branded as 'Shapley' for continuity).
+        
+        METHODOLOGY NOTE:
+        This is a heuristic approximation using volume-weighted attribution,
+        NOT a full game-theoretic Shapley Value calculation (which requires
+        Monte Carlo sampling over 2^N coalitions).
+        
         producer_ratio: fraction [0.0, 1.0] kept by the producer (SELF). The remainder is
         considered exported (assigned to trade partners proportionally to export value).
 

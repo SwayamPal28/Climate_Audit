@@ -66,7 +66,11 @@ const LLMAnalystPanel = ({
                 onAnalysisComplete(response.data.analysis);
             }
         } catch (err) {
-            const errorMsg = err.response?.data?.detail || err.message || "Analysis failed";
+            let errorMsg = err.message || "Analysis failed";
+            if (err.response?.data?.detail) {
+                const detail = err.response.data.detail;
+                errorMsg = typeof detail === 'object' ? JSON.stringify(detail) : detail;
+            }
             setError(errorMsg);
             console.error('LLM Analysis Error:', err);
         } finally {
@@ -140,7 +144,11 @@ const LLMAnalystPanel = ({
                 { role: 'assistant', content: response.data.response }
             ]);
         } catch (err) {
-            const errorMsg = err.response?.data?.detail || err.message || "Chat failed";
+            let errorMsg = err.message || "Chat failed";
+            if (err.response?.data?.detail) {
+                const detail = err.response.data.detail;
+                errorMsg = typeof detail === 'object' ? JSON.stringify(detail) : detail;
+            }
             setError(errorMsg);
             console.error('Chat Error:', err);
         } finally {
@@ -160,7 +168,6 @@ const LLMAnalystPanel = ({
         <div className={`llm-panel ${isCollapsed ? 'collapsed' : 'expanded'}`}>
             {/* Header with collapse button */}
             <div className="llm-panel-header">
-                <span className="llm-icon">🤖</span>
                 <h3>AI Policy Analyst</h3>
                 <button
                     onClick={() => setIsCollapsed(!isCollapsed)}
@@ -184,7 +191,7 @@ const LLMAnalystPanel = ({
                     {/* Error state */}
                     {error && !isAnalyzing && (
                         <div className="llm-error">
-                            <p>⚠️ {error}</p>
+                            <p>Error: {error}</p>
                             <button onClick={triggerAnalysis} className="retry-btn">
                                 Retry
                             </button>

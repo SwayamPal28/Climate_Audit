@@ -1,5 +1,3 @@
-// frontend/src/components/BilateralPolicySelector.jsx
-
 import React, { useState } from 'react';
 import './PolicyLab.css';
 

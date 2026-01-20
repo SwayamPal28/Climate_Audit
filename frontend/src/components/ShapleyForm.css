@@ -1,0 +1,193 @@
+/* ShapleyForm.css - Academic Glass Style */
+
+.shapley-container {
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.shapley-header {
+    margin-top: 0;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+}
+
+.shapley-form {
+    margin-bottom: 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.shapley-input {
+    padding: 10px;
+    flex: 1;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.8);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.shapley-input:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.shapley-submit-btn {
+    padding: 10px 20px;
+    background-color: var(--primary-blue);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.9rem;
+}
+
+.shapley-submit-btn:hover:not(:disabled) {
+    background-color: #1d4ed8;
+}
+
+.shapley-submit-btn:disabled {
+    background-color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.policy-slider-container {
+    margin-bottom: 18px;
+    background: var(--glass-bg);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.policy-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    display: block;
+    margin-bottom: 8px;
+}
+
+.policy-label strong {
+    color: var(--primary-blue);
+}
+
+.shapley-slider {
+    width: 100%;
+    margin-top: 8px;
+    cursor: pointer;
+    accent-color: var(--primary-blue);
+}
+
+.slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.chart-container {
+    width: 100%;
+    height: 400px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    padding: 20px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-shadow);
+    border: var(--glass-border);
+}
+
+.layer-guidance {
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.view-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.view-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.radio-label {
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.info-icon {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    cursor: help;
+    opacity: 0.7;
+}
+
+.totals-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.warning-box {
+    margin-top: 8px;
+    background: rgba(254, 226, 226, 0.4);
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(252, 165, 165, 0.3);
+}
+
+.warning-text {
+    color: #b91c1c;
+    font-weight: 600;
+}
+
+.sub-warning {
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.empty-state {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.anomaly-alert {
+    margin-top: 12px;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.anomaly-alert.high {
+    background: rgba(254, 242, 242, 0.5);
+    color: #b91c1c;
+    border: 1px solid rgba(252, 165, 165, 0.3);
+}
