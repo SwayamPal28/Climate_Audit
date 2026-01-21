@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import './PolicyLab.css';
 
-const SECTORS = ['Steel', 'Energy', 'Textiles', 'All'];
+const SECTORS = [
+    'Agriculture', 'Aircraft', 'Cement', 'Chemicals', 'Electronics',
+    'Energy', 'Iron Articles', 'Precious Metals', 'Ships', 'Steel',
+    'Textiles', 'Vehicles', 'Wood', 'All'
+];
 
 // Common countries for quick selection
 const COMMON_COUNTRIES = [

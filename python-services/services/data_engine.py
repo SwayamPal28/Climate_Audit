@@ -35,9 +35,19 @@ class DataEngine:
         self.edges = pd.DataFrame() # Store full edges for 'get_clean_contributors'
 
         edge_files = [
-            (self.data_dir / "processed_steel_direct.csv", "Steel 🏗️"),
-            (self.data_dir / "processed_energy_direct.csv", "Energy ⚡"),
-            (self.data_dir / "processed_textiles_direct.csv", "Textiles 👕"),
+            (self.data_dir / "processed_agriculture_direct.csv", "Agriculture"),
+            (self.data_dir / "processed_aircraft_direct.csv", "Aircraft"),
+            (self.data_dir / "processed_cement_direct.csv", "Cement"),
+            (self.data_dir / "processed_chemicals_direct.csv", "Chemicals"),
+            (self.data_dir / "processed_electronics_direct.csv", "Electronics"),
+            (self.data_dir / "processed_energy_direct.csv", "Energy"),
+            (self.data_dir / "processed_iron_articles_direct.csv", "Iron Articles"),
+            (self.data_dir / "processed_precious_metals_direct.csv", "Precious Metals"),
+            (self.data_dir / "processed_ships_direct.csv", "Ships"),
+            (self.data_dir / "processed_steel_direct.csv", "Steel"),
+            (self.data_dir / "processed_textiles_direct.csv", "Textiles"),
+            (self.data_dir / "processed_vehicles_direct.csv", "Vehicles"),
+            (self.data_dir / "processed_wood_direct.csv", "Wood"),
         ]
 
         all_edges_list = []
@@ -95,14 +105,15 @@ class DataEngine:
         
         # 4. Load Visualization Edges
         self.viz_edges = []
-        steel_path = self.data_dir / "processed_steel_direct.csv"
-        if steel_path.exists():
-            try:
-                df_viz = pd.read_csv(steel_path, low_memory=False)
-                df_viz['primaryValue'] = pd.to_numeric(df_viz['primaryValue'], errors='coerce').fillna(0)
-                df_viz = df_viz.nlargest(1500, 'primaryValue')
-                
-                for _, row in df_viz.iterrows():
+        try:
+             # Sample top edges from ALL loaded sectors
+             # We already loaded everything into self.edges with sector labels
+             if not self.edges.empty:
+                 # Take top N biggest trade relationships per sector to ensure diversity
+                 # Instead of just top 1500 overall which might be dominated by one sector (e.g. Energy)
+                 top_edges = self.edges.groupby('sector').apply(lambda x: x.nlargest(200, 'primaryValue')).reset_index(drop=True)
+                 
+                 for _, row in top_edges.iterrows():
                     s_iso = str(row['src_iso']).strip().upper()
                     t_iso = str(row['tgt_iso']).strip().upper()
                     
@@ -110,10 +121,11 @@ class DataEngine:
                         self.viz_edges.append({
                             "source": s_iso,
                             "target": t_iso,
-                            "value": float(row['primaryValue'])
+                            "value": float(row['primaryValue']),
+                            "sector": row['sector'] # Needed for frontend color coding
                         })
-            except Exception as e:
-                print(f"⚠️ Error processing viz edges: {e}")
+        except Exception as e:
+            print(f"⚠️ Error processing viz edges: {e}")
 
     def get_graph_data(self):
         """Prepares clean JSON for the 3D Graph Frontend"""

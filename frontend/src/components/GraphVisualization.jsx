@@ -5,6 +5,29 @@ import * as d3 from 'd3';
 import './GraphVisualization.css';
 import LLMAnalystPanel from './LLMAnalystPanel';
 
+// --- CONSTANTS ---
+const ALL_SECTORS = [
+  'Agriculture', 'Aircraft', 'Cement', 'Chemicals', 'Electronics',
+  'Energy', 'Iron Articles', 'Precious Metals', 'Ships', 'Steel',
+  'Textiles', 'Vehicles', 'Wood'
+];
+
+const SECTOR_COLORS = {
+  'Agriculture': '#2ecc71', // Green
+  'Aircraft': '#3498db',    // Blue
+  'Cement': '#95a5a6',      // Grey
+  'Chemicals': '#9b59b6',   // Purple
+  'Electronics': '#00cec9', // Cyan
+  'Energy': '#f1c40f',      // Yellow
+  'Iron Articles': '#7f8c8d',// Dark Grey
+  'Precious Metals': '#e67e22', // Orange
+  'Ships': '#34495e',       // Navy
+  'Steel': '#636e72',       // Steel Grey
+  'Textiles': '#e74c3c',    // Red
+  'Vehicles': '#d63031',    // Dark Red
+  'Wood': '#eccc68'         // Wood Color
+};
+
 // --- Helper: Fetch Country Names ---
 const fetchCountryNameMap = async () => {
   try {
@@ -147,11 +170,10 @@ const GraphVisualization = () => {
   const [hoverNode, setHoverNode] = useState(null);
   const [hoverLink, setHoverLink] = useState(null);
 
-  const [activeSectors, setActiveSectors] = useState({
-    steel: true,
-    energy: true,
-    textiles: true
-  });
+  // Initialize all sectors as valid
+  const [activeSectors, setActiveSectors] = useState(
+    ALL_SECTORS.reduce((acc, s) => ({ ...acc, [s]: true }), {})
+  );
 
   const [isLoading, setIsLoading] = useState(true);
   const [isoToNameMap, setIsoToNameMap] = useState({});
@@ -211,11 +233,16 @@ const GraphVisualization = () => {
             if (!sourceObj || !targetObj) return null;
             const rawValue = Number(link.value) || 0;
 
+            // Normalize sector name for reliability
+            let rawSector = link.sector || 'General';
+            // Find matching standard sector name case-insensitive
+            const matchedSector = ALL_SECTORS.find(s => s.toLowerCase() === rawSector.toLowerCase().split('_')[0]) || rawSector;
+
             return {
               source: sourceObj,
               target: targetObj,
               primaryValue: rawValue,
-              sector: link.sector || 'General',
+              sector: matchedSector,
               value: 1
             };
           }).filter(link => link && link.primaryValue > 0);
@@ -271,11 +298,13 @@ const GraphVisualization = () => {
 
   // --- Helpers ---
   const isLinkVisible = (link) => {
-    const s = (link.sector || '').toLowerCase();
-    if (s.includes('steel') && !activeSectors.steel) return false;
-    if (s.includes('energy') && !activeSectors.energy) return false;
-    if (s.includes('textile') && !activeSectors.textiles) return false;
-    return true;
+    const s = (link.sector || '').trim();
+    // Default to true if sector not found in map (fallback)
+    // Check strict match or partial match
+    const matchedKey = Object.keys(activeSectors).find(key =>
+      s.toLowerCase().includes(key.toLowerCase())
+    );
+    return matchedKey ? activeSectors[matchedKey] : true;
   };
 
   const formatNumber = (num, unit = '') => {
@@ -286,11 +315,12 @@ const GraphVisualization = () => {
   }
 
   const getSectorColor = (sector) => {
-    const s = String(sector || '').toLowerCase();
-    if (s.includes('steel')) return '#7f8c8d'; // Grey
-    if (s.includes('energy')) return '#f1c40f'; // Yellow
-    if (s.includes('textile')) return '#ef4444'; // Red
-    return '#b2bec3'; // Pewter Grey
+    const s = String(sector || '').trim();
+    // Find color by fuzzy match
+    const matchedKey = Object.keys(SECTOR_COLORS).find(key =>
+      s.toLowerCase().includes(key.toLowerCase())
+    );
+    return matchedKey ? SECTOR_COLORS[matchedKey] : '#b2bec3';
   };
 
   // --- Backend Logic ---
@@ -383,32 +413,24 @@ const GraphVisualization = () => {
     // --- NLP-LIKE LOGIC ---
     const lowerQ = searchQuery.toLowerCase();
 
-    // 1. Sector Detection
-    const hasSteel = lowerQ.includes('steel');
-    const hasEnergy = lowerQ.includes('energy') || lowerQ.includes('power') || lowerQ.includes('oil') || lowerQ.includes('gas');
-    const hasTextile = lowerQ.includes('textile') || lowerQ.includes('clothing') || lowerQ.includes('fabric');
+    // 1. Sector Detection - Check against all sectors
+    const detectedSectors = ALL_SECTORS.filter(s => lowerQ.includes(s.toLowerCase()));
 
-    // If any sector mentioned, filter to ONLY that sector
-    if (hasSteel || hasEnergy || hasTextile) {
-      setActiveSectors({
-        steel: hasSteel,
-        energy: hasEnergy,
-        textiles: hasTextile
-      });
+    // If any sector mentioned, filter to ONLY those sectors
+    if (detectedSectors.length > 0) {
+      const newActive = ALL_SECTORS.reduce((acc, s) => ({ ...acc, [s]: false }), {});
+      detectedSectors.forEach(s => newActive[s] = true);
+      setActiveSectors(newActive);
     }
 
     // 2. Country/Node Detection
     // Remove sector keywords to find the country name
-    let cleanQ = lowerQ
-      .replace(/steel/g, '')
-      .replace(/energy/g, '')
-      .replace(/power/g, '')
-      .replace(/oil/g, '')
-      .replace(/gas/g, '')
-      .replace(/textile/g, '')
-      .replace(/clothing/g, '')
-      .replace(/fabric/g, '')
-      .trim().toUpperCase();
+    let cleanQ = lowerQ;
+    ALL_SECTORS.forEach(s => {
+      const regex = new RegExp(s.toLowerCase(), 'g');
+      cleanQ = cleanQ.replace(regex, '');
+    });
+    cleanQ = cleanQ.trim().toUpperCase();
 
     // If query was ONLY sector (e.g. "show steel"), cleanQ might be empty/short. 
     // If so, just return after filtering.
@@ -446,7 +468,8 @@ const GraphVisualization = () => {
             setSelectedNode(null);
             setShapleyData([]);
             setSearchQuery('');
-            setActiveSectors({ steel: true, energy: true, textiles: true }); // Reset sectors too
+            // Reset to all active
+            setActiveSectors(ALL_SECTORS.reduce((acc, s) => ({ ...acc, [s]: true }), {}));
           }}
           className="action-btn clear-btn"
         >
@@ -470,8 +493,8 @@ const GraphVisualization = () => {
       <div className="info-panel">
         <div className="panel-title">Audit Controls</div>
 
-        <div className="sector-filters">
-          {['steel', 'energy', 'textiles'].map(sector => (
+        <div className="sector-filters" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {ALL_SECTORS.map(sector => (
             <button
               key={sector}
               className="sector-btn"
@@ -479,7 +502,10 @@ const GraphVisualization = () => {
               style={{
                 backgroundColor: activeSectors[sector] ? getSectorColor(sector) : '#fff',
                 color: activeSectors[sector] ? 'white' : '#64748b',
-                borderColor: activeSectors[sector] ? getSectorColor(sector) : '#e2e8f0'
+                borderColor: activeSectors[sector] ? getSectorColor(sector) : '#e2e8f0',
+                fontSize: '10px',
+                padding: '4px 8px',
+                flex: '1 0 auto'
               }}
             >
               {sector}
@@ -487,7 +513,7 @@ const GraphVisualization = () => {
           ))}
         </div>
 
-        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 15, display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 15, display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
           <span>LIVE NETWORK</span>
           <span>{graphData.nodes.length} Nodes • {visibleLinks.filter(isLinkVisible).length} Links</span>
         </div>
@@ -544,7 +570,7 @@ const GraphVisualization = () => {
 
             <SidebarRoleTable
               targetNode={selectedNode}
-              links={visibleLinks.filter(l => l.source.id === selectedNode.id || l.target.id === selectedNode.id)}
+              links={visibleLinks.filter(l => (l.source.id === selectedNode.id || l.target.id === selectedNode.id) && isLinkVisible(l))}
               allLinks={fullLinks}
               getCountryName={getCountryName}
             />
@@ -592,11 +618,7 @@ const GraphVisualization = () => {
 
         linkColor={link => {
           if (link === hoverLink) return '#00cec9'; // Highlight color (cyan)
-          const s = (link.sector || '').toLowerCase();
-          if (s.includes('steel')) return '#7f8c8d'; // Grey
-          if (s.includes('energy')) return '#f1c40f'; // Yellow
-          if (s.includes('textile')) return '#ef4444'; // Red
-          return '#b2bec3';
+          return getSectorColor(link.sector);
         }}
 
         linkWidth={link => {

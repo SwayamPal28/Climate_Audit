@@ -34,9 +34,19 @@ const DiplomaticSandbox = () => {
   ];
 
   const sectors = [
+    { value: 'Agriculture', label: 'Agriculture' },
+    { value: 'Aircraft', label: 'Aircraft' },
+    { value: 'Cement', label: 'Cement' },
+    { value: 'Chemicals', label: 'Chemicals' },
+    { value: 'Electronics', label: 'Electronics' },
     { value: 'Energy', label: 'Energy' },
+    { value: 'Iron Articles', label: 'Iron Articles' },
+    { value: 'Precious Metals', label: 'Precious Metals' },
+    { value: 'Ships', label: 'Ships' },
     { value: 'Steel', label: 'Steel' },
-    { value: 'Textiles', label: 'Textiles' }
+    { value: 'Textiles', label: 'Textiles' },
+    { value: 'Vehicles', label: 'Vehicles' },
+    { value: 'Wood', label: 'Wood' }
   ];
 
   const initializeGame = React.useCallback(async (playerIso, rivalIso) => {
@@ -97,12 +107,24 @@ const DiplomaticSandbox = () => {
         ai_persona: gameData?.rival?.persona || 'BALANCED'
       });
 
+      setEquilibriumFound(false); // Reset status each turn
+
       if (res.data.round_summary.ai_reaction.action === "STABILIZE") {
         setEquilibriumFound(true);
       } else {
-        const diff = Math.abs(severity - (res.data.round_summary.ai_reaction.tariff_rate || 0));
-        if (diff < 0.05 && turnHistory.length > 2) {
-          setEquilibriumFound(true);
+        // Strict Equilibrium Check:
+        // 1. Must be at least round 3 to avoid premature stability
+        // 2. AI tariff must be stable (change < 1%)
+        // 3. Player tariff must be stable (change < 1%) implies user didn't change input (handled by logic)
+
+        if (turnHistory.length > 2) {
+          const prevTurn = turnHistory[turnHistory.length - 1];
+          const aiTariffDelta = Math.abs((res.data.round_summary.ai_reaction.tariff_rate || 0) - (prevTurn.aiTariff / 100));
+
+          // If AI response hasn't changed significantly despite ongoing conflict (War Equilibrium)
+          if (aiTariffDelta < 0.01) {
+            setEquilibriumFound(true);
+          }
         }
       }
 

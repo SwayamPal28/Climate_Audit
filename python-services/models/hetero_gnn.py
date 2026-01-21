@@ -2,7 +2,7 @@ import torch
 from torch_geometric.nn import HeteroConv, GATv2Conv, Linear
 import torch.nn.functional as F
 
-class ClimaAuditHeteroGNN(torch.nn.Module):
+class ClimaAuditGNN(torch.nn.Module):
     def __init__(self, hidden_dim, out_dim, metadata):
         super().__init__()
         self.conv1 = HeteroConv({

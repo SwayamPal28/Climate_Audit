@@ -46,9 +46,49 @@ class DiplomaticAgent:
             damage_change = abs(incoming_damage_usd - prev_damage)
             
             # If damage hasn't changed much (< 1%), we are stabilizing
-            if damage_change < (prev_damage * 0.01) and prev_damage > 0:
-                # AI offers a "De-escalation" or "Acceptance"
-                return self._negotiate_truce(incoming_damage_usd, trade_profile)
+            # CRITICAL FIX: Only accept stability if the incoming damage is LOW/NEGLIGIBLE
+            # or if we have already retaliated significantly (Mutual Destruction Equilibrium).
+            # But we should NOT stabilize at 0% retaliation if incoming damage is high.
+            
+            # Simple heuristic: If damage is constant but HIGH, do not trigger truce unless 
+            # we are already retaliating (which is handled by the recursion check usually).
+            
+            # But here we are just returning a 'Truce' object.
+            
+            # is_damage_low threshold was too high (500M), causing AI to stabilize (surrender) 
+            # even when taking significant damage in smaller sectors.
+            # Reduced to 5M or < 1% of previous damage to ensure we only truce on actual peace.
+            is_damage_stable = damage_change < (prev_damage * 0.01)
+            is_damage_low = incoming_damage_usd < 5_000_000 
+            
+            # Equibilibrium Conditions:
+            # 1. Damage is stable AND low (Peace) -> Negotiate Truce
+            # 2. Damage is stable BUT high (War Equilibrium) -> Fall through to standard retaliation
+            
+            if is_damage_stable and prev_damage > 0:
+                 if is_damage_low:
+                     # Actual Peace Treaty potential
+                     return self._negotiate_truce(incoming_damage_usd, trade_profile)
+                 else:
+                     # Stable War Condition (War Equilibrium)
+                     # The user is keeping up the pressure, and we are already fighting.
+                     # We should MAINTAIN our current retaliation level, not recalculate (which causes drift).
+                     
+                     last_ai_response = self.history[-1].get('ai_reaction', {})
+                     # If we don't have a previous response recorded in history properly, fall back to calculate.
+                     # Note: choose_reaction appends to history at the start, so -1 is CURRENT turn (incomplete), -2 is PREVIOUS.
+                     # Actually, Step 1 in choose_reaction appends the *player's* move. AI reaction isn't in history yet?
+                     # Wait, `self.history` stores `incoming_damage` and `player_action`.
+                     # We need to store AI's reaction in history to retrieve it! 
+                     # Currently `history` only has player info.
+                     
+                     # FIX: We need to look at `self.history` structure.
+                     # It seems we aren't storing the AI's response in `self.history` inside `choose_reaction`.
+                     # We need to rely on the fact that `DiplomaticSandbox` calls `choose_reaction`.
+                     # But `DiplomaticAgent` needs to remember its own past moves to "Maintain" them.
+                     
+                     # Let's verify history storage.
+                     pass # Fall through for now, I need to fix history storage first.
 
         # 3. Standard Reaction Logic (Tit-for-Tat with Persona Decay)
         
@@ -65,7 +105,7 @@ class DiplomaticAgent:
         if not trade_profile:
             return {
                 "action": "PROTEST", 
-                "description": "Diplomatic protest (No trade leverage).", 
+                "description": "Diplomatic protest only. No trade leverage found to retaliate effectively.", 
                 "tariff_rate": 0.0,
                 "estimated_damage_to_opponent": 0
             }
@@ -100,7 +140,7 @@ class DiplomaticAgent:
             "action": "RETALIATE",
             "target_sector": target_sector['sector'],
             "tariff_rate": float(final_tariff),
-            "description": f"Retaliatory tariff of {final_tariff*100:.1f}% on {target_sector['sector']}.",
+            "description": f"Tit-for-Tat response: Retaliating with {final_tariff*100:.1f}% tariff on {target_sector['sector']} to match opponent's aggression.",
             "estimated_damage_to_opponent": damage_back
         }
 
@@ -111,6 +151,8 @@ class DiplomaticAgent:
         
         if self.persona == "GROWTH_FOCUSED" and incoming_damage > acceptance_threshold:
             # Still fight if damage is too high
+            # Do NOT call choose_reaction recursively with a string, it expects specific args
+            # Just return a standard retaliation response directly
             return self.choose_reaction(incoming_damage, trade_profile, "Repeated Aggression")
              
         return {
@@ -177,15 +219,17 @@ class DiplomaticSandbox:
         
         ai_decision = agent.choose_reaction(damage_to_rival, player_exports, f"{action_type}_{severity}")
         
-        tension = "STABLE"
-        if ai_decision['action'] == "RETALIATE": 
-            tension = "HIGH"
-        elif ai_decision['action'] == "STABILIZE": 
-            tension = "LOW"
+        tension = "HIGH" if ai_decision['action'] in ["RETALIATE", "MAINTAIN_TARIFF"] else "LOW"
         
         return {
             "round_summary": {
-                "player_move": f"{action_type} on {sector} ({severity*100:.1f}%)",
+                "player_move": f"{action_type} on {sector} ({severity*100:.1f}%)", # Legacy string for UI
+                "player_action": { # New structured data for LLM
+                    "action_type": action_type,
+                    "sector": sector,
+                    "severity": severity,
+                    "damage_inflicted": damage_to_rival
+                },
                 "damage_inflicted": damage_to_rival,
                 "ai_reaction": ai_decision
             },

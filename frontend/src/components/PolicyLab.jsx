@@ -308,7 +308,7 @@ const PolicyLab = () => {
               // MATCHED STYLES
               nodeVal={node => Math.max(2.5, Math.sqrt(node.gdp_usd || 0) / 7000)}
               nodeColor={getNodeColor}
-              nodeLabel={node => `${node.label}: Risk ${(node.co2 || 0).toFixed(1)}`}
+              nodeLabel={node => `${node.label || node.id || node.iso3}: Risk ${(node.co2 || 0).toFixed(1)}`}
               nodeResolution={24}
               nodeOpacity={0.9}
 
@@ -351,7 +351,7 @@ const PolicyLab = () => {
                   // Keep highlighting simple to match Dashboard
                   return node.node_color_override || getNodeColor(node);
                 }}
-                nodeLabel={node => `${node.label}: Risk ${(node.co2 || 0).toFixed(1)}`}
+                nodeLabel={node => `${node.label || node.id || node.iso3}: Risk ${(node.co2 || 0).toFixed(1)}`}
                 nodeResolution={24}
                 nodeOpacity={0.9}
 
@@ -389,18 +389,79 @@ const PolicyLab = () => {
           </div>
 
           {/* CENTER: KEY INSIGHTS */}
-          {metrics && (metrics.volume_delta_pct !== undefined || metrics.leakage_risk) && (
+          {/* CENTER: KEY INSIGHTS */}
+          {metrics && (
             <div className="insights-overlay">
-              <div className="insight-metric">
-                <div className="insight-label">Trade Vol. Change</div>
-                <div className={`insight-value ${metrics.volume_delta_pct < 0 ? 'negative' : 'positive'}`}>
-                  {(metrics.volume_delta_pct ?? 0).toFixed(1)}%
+              {/* 1. TRADE VOLUME (CBAM / Generic) */}
+              {metrics.volume_delta_pct !== undefined && (
+                <div className="insight-metric">
+                  <div className="insight-label">Trade Vol. Change</div>
+                  <div className={`insight-value ${metrics.volume_delta_pct < 0 ? 'negative' : 'positive'}`}>
+                    {(metrics.volume_delta_pct ?? 0).toFixed(1)}%
+                  </div>
                 </div>
-              </div>
-              <div className="insight-metric">
-                <div className="insight-label">Risk Shift</div>
-                <div className="insight-value">{metrics.leakage_risk || 'N/A'}</div>
-              </div>
+              )}
+
+              {/* 2. INTENSITY REDUCTION (Tech Transfer) */}
+              {metrics.intensity_delta_pct !== undefined && (
+                <div className="insight-metric">
+                  <div className="insight-label">Carbon Intensity</div>
+                  <div className="insight-value positive">
+                    {(metrics.intensity_delta_pct ?? 0).toFixed(1)}%
+                  </div>
+                </div>
+              )}
+
+              {/* 3. COST & REBOUND (Tech Transfer) */}
+              {metrics.implementation_cost_usd > 0 && (
+                <div className="insight-metric">
+                  <div className="insight-label">Est. Cost</div>
+                  <div className="insight-value negative">
+                    ${(metrics.implementation_cost_usd / 1e12).toFixed(1)}T
+                  </div>
+                </div>
+              )}
+
+              {metrics.gdp_rebound_pct > 0 && (
+                <div className="insight-metric">
+                  <div className="insight-label">GDP Rebound</div>
+                  <div className="insight-value positive">
+                    +{(metrics.gdp_rebound_pct).toFixed(1)}%
+                  </div>
+                </div>
+              )}
+
+              {/* 4. RIPPLE EFFECTS (CBAM) */}
+              {metrics.ripple_effects && Object.keys(metrics.ripple_effects).length > 0 && (
+                <div className="insight-metric">
+                  <div className="insight-label">Ripple Impact</div>
+                  <div className="insight-value negative" style={{ fontSize: '12px', lineHeight: '1.2' }}>
+                    {Object.entries(metrics.ripple_effects).slice(0, 1).map(([iso, val]) => (
+                      <div key={iso}>{iso}: {val}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 5. FAIRNESS SPLIT (Fairness Dial) */}
+              {metrics.producer_ratio !== undefined && (
+                <div className="insight-metric">
+                  <div className="insight-label">Responsibility</div>
+                  <div className="insight-value" style={{ fontSize: '13px' }}>
+                    Prod: {Math.round(metrics.producer_ratio * 100)}%
+                    <br />
+                    Cons: {Math.round((1 - metrics.producer_ratio) * 100)}%
+                  </div>
+                </div>
+              )}
+
+              {/* 6. RISK SHIFT (All) */}
+              {metrics.leakage_risk && (
+                <div className="insight-metric">
+                  <div className="insight-label">Risk Shift</div>
+                  <div className="insight-value">{metrics.leakage_risk}</div>
+                </div>
+              )}
             </div>
           )}
         </div>

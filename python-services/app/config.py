@@ -16,7 +16,7 @@ APP_VERSION = "2.0.1"
 # Using Google Gemini 2.0 Flash as the default analyst model
 LLM_MODEL_NAME = "models/gemini-2.0-flash" 
 # Path to the GNN model file (if present)
-GNN_MODEL_PATH = MODEL_DIR / "clima_audit_v2.pt"
+GNN_MODEL_PATH = MODEL_DIR / "climaaudit_model.pt"
 
 # --- POLICY SIMULATION CONSTANTS ---
 

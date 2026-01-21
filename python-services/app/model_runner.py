@@ -1,6 +1,6 @@
 import torch
 import os
-from models.gnn_model import ClimaAuditGNN
+from models.hetero_gnn import ClimaAuditGNN
 import joblib
 from torch_geometric.data import Data
 import pandas as pd

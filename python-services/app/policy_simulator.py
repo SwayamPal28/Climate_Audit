@@ -264,6 +264,42 @@ class PolicySimulator:
                 axis=1
             )
         
+        # Calculate Ripple Effects (GDP impact on specific countries)
+        # Distribute the total volume loss based on the exporter's share of the affected trade
+        ripple_effects = {}
+        if src_col in edges_df.columns:
+            # 1. Get original trade volumes for the affected edges grouped by Source
+            # Note: We must use original_edges_df to get the baseline share
+            affected_subset = self.original_edges_df[affected_edges]
+            
+            if not affected_subset.empty:
+                exporter_shares = affected_subset.groupby(src_col)['primaryValue'].sum()
+                total_affected_vol = exporter_shares.sum()
+                
+                if total_affected_vol > 0:
+                    # 2. Map GDP for calculation
+                    node_gdp_map = {
+                        node['iso3']: float(node.get('gdp', 0)) 
+                        for node in nodes_df.to_dict('records')
+                    }
+                    
+                    # 3. Calculate impact for top 5 most affected exporters
+                    # Sort by volume share
+                    top_exporters = exporter_shares.sort_values(ascending=False).head(5)
+                    
+                    for iso, export_vol in top_exporters.items():
+                        iso = str(iso).strip().upper()
+                        # Calculate their share of the total loss
+                        loss_share_amount = volume_delta * (export_vol / total_affected_vol)
+                        
+                        country_gdp = node_gdp_map.get(iso, 0)
+                        
+                        if country_gdp > 0:
+                            gdp_impact_pct = (loss_share_amount / country_gdp) * 100
+                            # Only show if meaningful
+                            if abs(gdp_impact_pct) > 0.01:
+                                ripple_effects[iso] = f"{gdp_impact_pct:.2f}%"
+
         return {
             "simulated_nodes": nodes_df.to_dict(orient='records'),
             "simulated_edges": edges_df.to_dict(orient='records'),
@@ -280,7 +316,8 @@ class PolicySimulator:
                 "financial_impact_usd": float(financial_impact),
                 "severity_applied": float(severity),
                 "iterations": i + 1,
-                "converged": True
+                "converged": True,
+                "ripple_effects": ripple_effects
             }
         }
     
@@ -356,6 +393,20 @@ class PolicySimulator:
             edges_df['edge_color'] = '#b2bec3'  # Default
             edges_df.loc[affected_trade_mask, 'edge_color'] = '#27ae60'  # Green for tech transfer routes
         
+        # Estimate implementation cost (Simulated: $500 per tCO2 reduced roughly, or based on GDP)
+        # 1% intensity reduction costs ~0.1% of GDP
+        total_gdp = nodes_df['gdp'].sum() if 'gdp' in nodes_df.columns else 0
+        implementation_cost_usd = total_gdp * (abs(intensity_delta_pct) / 100) * 0.05
+        
+        # Simulate "Green Boom" Rebound (GDP Growth from efficiency)
+        # If severity > 0.3, assume 5% efficiency gain translates to GDP growth
+        gdp_rebound_pct = 0.0
+        if severity >= 0.3:
+            gdp_rebound_pct = 5.0
+            if 'gdp' in nodes_df.columns:
+                 # Apply growth to target countries
+                 nodes_df.loc[target_mask, 'gdp'] *= 1.05
+        
         return {
             "simulated_nodes": nodes_df.to_dict(orient='records'),
             "simulated_edges": edges_df.to_dict(orient='records'),
@@ -370,6 +421,8 @@ class PolicySimulator:
                 "target_countries": list(target_iso_set),
                 "global_impact_weight_pct": float(global_impact_weight),
                 "estimated_co2_reduction_kt": float(global_co2_reduction_estimate),
+                "implementation_cost_usd": float(implementation_cost_usd),
+                "gdp_rebound_pct": float(gdp_rebound_pct),
                 "severity_applied": float(severity)
             }
         }
