@@ -718,6 +718,108 @@ def play_turn(payload: DiplomacyTurnRequest):
         payload.action_type, payload.sector, payload.severity
     )
 
+@app.get("/api/diplomacy/matchup")
+@app.get("/api/diplomacy/matchup")
+def get_matchup_context(player: str, rival: str, carbon_price: float = 85.0, accountability_weight: float = 0.0):
+    """
+    Returns CBAM Fairness Analysis with Shared Accountability.
+    accountability_weight: 0.0 (Pure Production) -> 1.0 (Pure Consumption).
+    """
+    if data_engine is None:
+        raise HTTPException(status_code=503, detail="Data Engine not initialized")
+        
+    player = player.upper().strip()
+    rival = rival.upper().strip()
+    
+    try:
+        # 1. Get Base Data
+        p_node = data_engine.get_node(player)
+        r_node = data_engine.get_node(rival)
+        
+        # Production Intensities (Base)
+        p_prod = float(p_node.get('energy_intensity', 0))
+        r_prod = float(r_node.get('energy_intensity', 0))
+        
+        # Consumption Intensities (Calculated)
+        p_cons, p_imp, p_exp = data_engine.calculate_consumer_intensity(player)
+        r_cons, r_imp, r_exp = data_engine.calculate_consumer_intensity(rival)
+        
+        # 2. Apply Accountability Weight
+        # Weight is 0.0 to 1.0.
+        # If w=0, outcome = p_prod.
+        # If w=1, outcome = p_cons.
+        # If w=0.5, outcome = Average.
+        
+        w_cons = max(0.0, min(1.0, accountability_weight)) # Clamp
+        w_prod = 1.0 - w_cons
+        
+        p_final = (p_prod * w_prod) + (p_cons * w_cons)
+        r_final = (r_prod * w_prod) + (r_cons * w_cons)
+
+        # 3. Calculate Carbon Gap (Rival - Player)
+        carbon_gap = r_final - p_final
+        
+        # 4. Calculate Fair Tariff
+        # Logic: Gap (T/$M GDP) * Price ($/T) = Cost
+        SCALING_FACTOR = 0.005 
+        
+        fair_tariff = 0.0
+        if carbon_gap > 0:
+            fair_tariff = (carbon_gap * carbon_price * SCALING_FACTOR)
+            fair_tariff = min(fair_tariff, 50.0) # Cap at 50%
+        
+        # 5. Scenario Context (Dynamic Text)
+        scenario_context = "Standard bilateral trade comparison."
+        if carbon_gap > 30:
+            scenario_context = "Significant Carbon Intensity Gap. High risk of carbon leakage if tariffs are not applied to equalize costs."
+        elif carbon_gap > 10:
+            scenario_context = "Moderate Carbon Intensity Gap. A calibrated tariff is recommended to maintain competitiveness."
+        elif carbon_gap > -10:
+            scenario_context = "Emissions intensities are comparable. Minimal intervention required; focus on technical standards."
+        else:
+            scenario_context = "Partner is cleaner than domestic production. Import tariffs would likely be challenged as protectionist."
+
+        # 6. Leakage Risk
+        return {
+            "player": {
+                "iso": player, 
+                "intensity": p_final,
+                "raw_production": p_prod,
+                "raw_consumption": p_cons
+            },
+            "rival": {
+                "iso": rival, 
+                "intensity": r_final,
+                 "raw_production": r_prod,
+                "raw_consumption": r_cons
+            },
+            "analysis": {
+                "carbon_gap": carbon_gap,
+                "fair_tariff_rate": fair_tariff,
+                "carbon_price_used": carbon_price,
+                "accountability_weight": w_cons,
+                "leakage_risk": "HIGH" if carbon_gap < 0 else "LOW",
+                "scenario_context": scenario_context
+            }
+        }
+    except Exception as e:
+        print(f"Matchup Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    except Exception as e:
+        print(f"Matchup error: {e}")
+        # Return safe defaults if lookup fails
+        return {
+             "player": {"iso": player, "intensity": 100},
+             "rival": {"iso": rival, "intensity": 100},
+             "analysis": {
+                 "carbon_gap": 0, 
+                 "recommended_tariff": 0, 
+                 "scenario_type": "Unknown",
+                 "is_compliant": True
+             }
+        }
+
 # --- LLM ENDPOINTS ---
 
 @app.post("/api/llm/analyze-policy")

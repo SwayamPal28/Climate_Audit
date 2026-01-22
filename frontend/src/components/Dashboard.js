@@ -126,7 +126,7 @@ const Dashboard = () => {
             Policy Lab
           </Link>
           <Link to="/diplomacy" className="nav-button">
-            Diplomacy Sandbox
+            CATE Fairness Engine
           </Link>
         </nav>
 

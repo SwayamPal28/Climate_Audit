@@ -248,7 +248,7 @@ const GraphVisualization = () => {
           }).filter(link => link && link.primaryValue > 0);
 
         setFullLinks(links);
-        setGraphData({ nodes: cleanNodes, links: [] });
+        setGraphData({ nodes: cleanNodes, links: [] });  // Start empty per user request
 
       } catch (error) {
         console.error('Error loading graph:', error);
@@ -375,33 +375,35 @@ const GraphVisualization = () => {
     if (!node) return;
     setHoverLink(null);
 
+    // Get ALL edges for THIS node only
     const connectedLinks = fullLinks.filter(link =>
       link.source.id === node.id || link.target.id === node.id
     );
 
-    const combinedLinks = [...visibleLinks, ...connectedLinks];
-    const uniqueLinks = Array.from(new Map(combinedLinks.map(link => [link.source.id + "-" + link.target.id, link])).values());
+    console.log(`🔍 Clicked ${node.id}: Found ${connectedLinks.length} edges in fullLinks`);
 
-    setVisibleLinks(uniqueLinks);
-    setGraphData(prev => ({ ...prev, links: uniqueLinks }));
+    // REPLACE visible links with ONLY this node's edges
+    setVisibleLinks(connectedLinks);
+    setGraphData(prev => ({ ...prev, links: connectedLinks }));
     setSelectedNode(node);
 
     // Prepare Shapley data for LLM analysis
-    // We'll trigger this after Shapley calculation completes
-    // For now, just set basic node info
     setSelectedNodeForAnalysis({
       target_country: node.id,
-      allocations: {},  // Will be updated by fetchShapley
+      allocations: {},
       contributors: [],
       total_co2_kt: node.co2 || 0
     });
 
+    // Center camera on the selected node
     if (fgRef.current) {
-      const distRatio = 1 + 300 / Math.hypot(node.x, node.y, node.z);
+      const distance = 400;
+      const nodePos = node.x !== undefined ? node : { x: 0, y: 0, z: 0 };
+
       fgRef.current.cameraPosition(
-        { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-        node,
-        2000
+        { x: nodePos.x, y: nodePos.y + distance * 0.5, z: nodePos.z + distance },
+        nodePos,
+        1500
       );
     }
   };
@@ -443,6 +445,19 @@ const GraphVisualization = () => {
     if (node) {
       setHoverNode(node);
       handleNodeClick(node);
+
+      // Additional centering after a short delay to ensure node position is updated
+      setTimeout(() => {
+        if (fgRef.current && node) {
+          const distance = 400;
+          const nodePos = node.x !== undefined ? node : { x: 0, y: 0, z: 0 };
+          fgRef.current.cameraPosition(
+            { x: nodePos.x, y: nodePos.y + distance * 0.5, z: nodePos.z + distance },
+            nodePos,
+            1500
+          );
+        }
+      }, 300);
     }
   };
 

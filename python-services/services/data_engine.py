@@ -103,27 +103,63 @@ class DataEngine:
                         
         print(f"   ✅ Loaded trade volumes for {len(self.edge_volumes)} pairs.")
         
-        # 4. Load Visualization Edges
+        # 4. Load Visualization Edges - ENHANCED FOR MAJOR ECONOMIES
         self.viz_edges = []
         try:
-             # Sample top edges from ALL loaded sectors
-             # We already loaded everything into self.edges with sector labels
-             if not self.edges.empty:
-                 # Take top N biggest trade relationships per sector to ensure diversity
-                 # Instead of just top 1500 overall which might be dominated by one sector (e.g. Energy)
-                 top_edges = self.edges.groupby('sector').apply(lambda x: x.nlargest(200, 'primaryValue')).reset_index(drop=True)
-                 
-                 for _, row in top_edges.iterrows():
-                    s_iso = str(row['src_iso']).strip().upper()
-                    t_iso = str(row['tgt_iso']).strip().upper()
-                    
-                    if s_iso in self.iso_to_idx and t_iso in self.iso_to_idx:
-                        self.viz_edges.append({
-                            "source": s_iso,
-                            "target": t_iso,
-                            "value": float(row['primaryValue']),
-                            "sector": row['sector'] # Needed for frontend color coding
-                        })
+              # Strategy: Combine top edges by volume + ensure major economies are visible
+              if not self.edges.empty:
+                  # Major economies that should always have visible connections
+                  MAJOR_ECONOMIES = ['USA', 'CHN', 'IND', 'DEU', 'JPN', 'GBR', 'FRA', 'BRA', 'RUS', 'CAN', 
+                                    'AUS', 'KOR', 'MEX', 'IDN', 'SAU', 'ARE', 'SGP', 'NLD', 'ESP', 'ITA']
+                  
+                  # 1. Get top 150 edges per sector by trade volume (for diversity)
+                  top_by_volume = pd.concat([
+                      group.nlargest(150, 'primaryValue') 
+                      for _, group in self.edges.groupby('sector', group_keys=False)
+                  ])
+                  
+                  # 2. SPECIAL: Get ALL edges for India (no limit!)
+                  india_edges = self.edges[
+                      (self.edges['src_iso'] == 'IND') | (self.edges['tgt_iso'] == 'IND')
+                  ]
+                  
+                  # 3. Get top 100 edges per sector for other major economies (increased from 50)
+                  major_economy_edges = []
+                  for economy in MAJOR_ECONOMIES:
+                      if economy == 'IND':
+                          continue  # Already handled above with no limit
+                      if economy in self.iso_to_idx:
+                          # Get edges where this economy is either source or target
+                          economy_edges = self.edges[
+                              (self.edges['src_iso'] == economy) | (self.edges['tgt_iso'] == economy)
+                          ]
+                          if not economy_edges.empty:
+                              # Take top 100 connections per sector for this economy
+                              for sector, group in economy_edges.groupby('sector'):
+                                  major_economy_edges.append(group.nlargest(100, 'primaryValue'))
+                  
+                  # Combine ALL sets and remove duplicates
+                  all_parts = [top_by_volume, india_edges]  # India edges included FULLY
+                  if major_economy_edges:
+                      major_economy_df = pd.concat(major_economy_edges)
+                      all_parts.append(major_economy_df)
+                  
+                  combined_edges = pd.concat(all_parts).drop_duplicates(
+                      subset=['src_iso', 'tgt_iso', 'sector']
+                  )
+                  
+                  # Convert to visualization format
+                  for _, row in combined_edges.iterrows():
+                     s_iso = str(row['src_iso']).strip().upper()
+                     t_iso = str(row['tgt_iso']).strip().upper()
+                     
+                     if s_iso in self.iso_to_idx and t_iso in self.iso_to_idx:
+                         self.viz_edges.append({
+                             "source": s_iso,
+                             "target": t_iso,
+                             "value": float(row['primaryValue']),
+                             "sector": row['sector'] # Needed for frontend color coding
+                         })
         except Exception as e:
             print(f"⚠️ Error processing viz edges: {e}")
 
@@ -297,6 +333,48 @@ class DataEngine:
         
         return 0.0
     
+    def get_alternative_suppliers(self, importer_iso, excluded_iso, sector):
+        """
+        Finds other countries exporting 'sector' to 'importer_iso'.
+        Used to calculate Carbon Leakage (if trade shifts to dirtier suppliers).
+        """
+        importer_iso = str(importer_iso).strip().upper()
+        excluded_iso = str(excluded_iso).strip().upper()
+        
+        if self.edges.empty:
+            return []
+            
+        # Filter for exports to importer in this sector
+        mask = (
+            (self.edges['tgt_iso'] == importer_iso) & 
+            (self.edges['src_iso'] != excluded_iso) & 
+            (self.edges['sector'] == sector)
+        )
+        
+        alternatives = self.edges[mask].copy()
+        
+        if alternatives.empty:
+            return []
+            
+        # Get intensities
+        results = []
+        for _, row in alternatives.iterrows():
+            src = row['src_iso']
+            if src in self.iso_to_idx:
+                node = self.nodes_df.iloc[self.iso_to_idx[src]]
+                intensity = float(node.get('energy_intensity', 0))
+                value = float(row['primaryValue'])
+                
+                results.append({
+                    "iso": src,
+                    "intensity": intensity,
+                    "volume": value
+                })
+        
+        # Sort by volume (biggest potential replacers)
+        results.sort(key=lambda x: x['volume'], reverse=True)
+        return results[:5] 
+        
     def get_node(self, iso):
         """
         Get node details for a specific country
@@ -309,6 +387,59 @@ class DataEngine:
             return self.nodes_df.iloc[idx].to_dict()
         
         return {}
+
+    def calculate_consumer_intensity(self, iso):
+        """
+        Calculates Consumption-Based Carbon Intensity.
+        Formula: (Local_Emissions + Import_Emissions - Export_Emissions) / GDP
+        """
+        iso = str(iso).strip().upper()
+        if iso not in self.iso_to_idx or self.edges.empty:
+            # Fallback to production intensity
+            node = self.get_node(iso)
+            return float(node.get('energy_intensity', 0)), 0.0, 0.0
+            
+        # 1. Base Production Intensity
+        node = self.get_node(iso)
+        prod_intensity = float(node.get('energy_intensity', 0))
+        gdp = float(node.get('gdp', 1))
+        
+        if gdp <= 0: return prod_intensity, 0, 0
+        
+        local_emissions = prod_intensity * gdp # Proxy total emissions
+        
+        # 2. Add Imports (Emissions embodied in imports)
+        imports = self.edges[self.edges['tgt_iso'] == iso]
+        total_imported_co2 = 0.0
+        
+        for _, row in imports.iterrows():
+            src_iso = row['src_iso']
+            vol = float(row['primaryValue'])
+            if src_iso in self.iso_to_idx:
+                src_node = self.nodes_df.iloc[self.iso_to_idx[src_iso]]
+                src_int = float(src_node.get('energy_intensity', 0))
+                # Emissions = Volume * Src_Intensity
+                total_imported_co2 += vol * src_int
+                
+        # 3. Subtract Exports (Emissions embodied in exports)
+        # We assume exports carry the NATIONAL AVERAGE intensity logic
+        exports = self.edges[self.edges['src_iso'] == iso]
+        total_exported_vol = exports['primaryValue'].sum()
+        total_exported_co2 = total_exported_vol * prod_intensity
+        
+        # 4. Net Consumption Emissions
+        net_emissions = local_emissions + total_imported_co2 - total_exported_co2
+        
+        # Avoid negative emissions in edge cases
+        net_emissions = max(net_emissions, 0)
+        
+        consumer_intensity = net_emissions / gdp
+        
+        # Differential for UI (how much "ghost" carbon?)
+        import_adder = total_imported_co2 / gdp
+        export_subtractor = total_exported_co2 / gdp
+        
+        return consumer_intensity, import_adder, export_subtractor
 
 # --- SINGLETON & FACTORY ---
 _data_engine_instance = None
