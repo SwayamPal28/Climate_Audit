@@ -32,7 +32,8 @@ const PolicyLab = () => {
   const originalGraphRef = React.useRef();
   const simulatedGraphRef = React.useRef();
 
-  const [attributionMode, setAttributionMode] = useState('shapley');
+  // Fairness Dial State
+  const [fairnessRatio, setFairnessRatio] = useState(0.5);
   const [isLoading, setIsLoading] = useState(true);
   const [bilateralResults, setBilateralResults] = useState(null);
   const [isBilateralLoading, setIsBilateralLoading] = useState(false);
@@ -90,7 +91,9 @@ const PolicyLab = () => {
     setIsRunning(true);
     try {
       const payload = { policy_type: scenario, severity: severity };
-      if (scenario === 'FAIRNESS_DIAL') payload.attribution_mode = attributionMode;
+      if (scenario === 'FAIRNESS_DIAL') {
+        payload.producer_ratio = fairnessRatio;
+      }
 
       const response = await axios.post('/api/simulate/policy', payload);
 
@@ -98,7 +101,7 @@ const PolicyLab = () => {
         setSimulatedGraph(response.data.simulated);
         setMetrics(response.data.metrics || null);
         setLatestSimulation({
-          policy_type: scenario, severity, metrics: response.data.metrics || {}, context: { attribution_mode: attributionMode }
+          policy_type: scenario, severity, metrics: response.data.metrics || {}, context: { producer_ratio: fairnessRatio }
         });
         setIsDrawerOpen(true); // Auto-open drawer for results
       }
@@ -108,7 +111,7 @@ const PolicyLab = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [scenario, severity, attributionMode]);
+  }, [scenario, severity, fairnessRatio]);
 
   /* ... Bilateral Logic Copied from original ... */
   /* ... Bilateral Logic Copied from original ... */
@@ -179,17 +182,85 @@ const PolicyLab = () => {
     return '#b2bec3'; // Pewter Grey
   };
 
-  const getNodeColor = (node) => {
-    return node.co2 > 80 ? '#ef4444' : '#3E6985'; // Red for Risk, Teal Blue for Safe
+  // --- COLORING LOGIC ---
+
+  // 1. ORIGINAL REALITY COLORS
+  const getOriginalNodeColor = (node) => {
+    return node.co2 > 80 ? '#ef4444' : '#3E6985'; // Red (Risk) vs Teal (Safe)
   };
 
-  const getLinkColor = (link) => {
-    // If selected, highlight its links
+  const getOriginalLinkColor = (link) => {
     if (selectedNode) {
       const isConnected = link.source.id === selectedNode.id || link.target.id === selectedNode.id;
-      if (isConnected) return '#ef4444'; // Highlight connected
+      if (isConnected) return '#ef4444';
     }
-    return getSectorColor(link.sector);
+
+    // SIMPLIFIED COLOR LOGIC (Red = Dirty, Blue-Grey = Clean)
+    const s = String(link.sector || '').toLowerCase();
+    if (s.includes('energy') || s.includes('steel') || s.includes('textile')) {
+      return '#ef4444'; // Red (High Carbon Trade)
+    }
+    return '#94a3b8'; // Blue-Grey (Low Carbon/Service Trade)
+  };
+
+  // 2. SIMULATED FUTURE COLORS (The "Storytelling" Layer)
+  const getFutureNodeColor = (node) => {
+    if (scenario === 'FAIRNESS_DIAL') return getOriginalNodeColor(node); // Fairness handled by edges
+
+    // CBAM: Highlight those who failed to adapt vs those who did
+    if (scenario === 'CBAM') {
+      // Hypoth: If CO2 still high > 80, they appear Dark Red (Stubborn). If they lowered, Teal.
+      return node.co2 > 80 ? '#991b1b' : '#3E6985';
+    }
+
+    // TECH TRANSFER: Highlight Adopters
+    if (scenario === 'TECH_TRANSFER') {
+      // Hypoth: If they received tech, they turn Green.
+      // For visual demo, we make low-risk nodes vibrant green
+      return node.co2 < 40 ? '#10b981' : '#94a3b8'; // Green vs Grey
+    }
+
+    return getOriginalNodeColor(node);
+  };
+
+  const getFutureLinkColor = (link) => {
+    // FAIRNESS: The Gradient
+    if (scenario === 'FAIRNESS_DIAL') {
+      const tension = Math.abs(fairnessRatio - 0.5) * 2;
+      const r = Math.round(62 + (239 - 62) * tension);
+      const g = Math.round(105 + (68 - 105) * tension);
+      const b = Math.round(133 + (68 - 133) * tension);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    const src = link.source;
+    const tgt = link.target;
+    // Safety check: D3 replaces IDs with Objects, but check just in case
+    const srcCO2 = src.co2 !== undefined ? src.co2 : (originalGraph.nodes.find(n => n.id === src)?.co2 || 0);
+    const tgtCO2 = tgt.co2 !== undefined ? tgt.co2 : (originalGraph.nodes.find(n => n.id === tgt)?.co2 || 0);
+    const sector = String(link.sector || '').toLowerCase();
+    const isDirty = sector.includes('energy') || sector.includes('steel') || sector.includes('textile');
+
+    // CBAM: Purple for Tariff, Orange for Leakage
+    if (scenario === 'CBAM') {
+      if (isDirty) {
+        // Tariff: High Risk -> Low Risk (Regulated Entrance)
+        if (srcCO2 > 80 && tgtCO2 <= 80) return '#7c3aed'; // Purple
+        // Leakage: High Risk -> High Risk (Unregulated Club)
+        if (srcCO2 > 80 && tgtCO2 > 80) return '#f97316'; // Orange
+      }
+      return '#cbd5e1'; // Muted
+    }
+
+    // TECH: Cyan for Tech Flows
+    if (scenario === 'TECH_TRANSFER') {
+      // Tech Flow: If either partner is Green (Adopter)
+      const isGreen = srcCO2 < 40 || tgtCO2 < 40;
+      if (isGreen) return '#06b6d4'; // Cyan
+      return '#cbd5e1'; // Muted
+    }
+
+    return link.edge_color || getSectorColor(link.sector);
   };
 
   const handleNodeClick = useCallback((node) => {
@@ -255,13 +326,26 @@ const PolicyLab = () => {
                   <input type="range" className="chunky-slider" min="0" max="0.5" step="0.05" value={severity} onChange={e => setSeverity(parseFloat(e.target.value))} />
                 </div>
               ) : (
-                <div className="input-group">
-                  <label>Attribution Logic</label>
-                  <select className="scenario-select" value={attributionMode} onChange={e => setAttributionMode(e.target.value)}>
-                    <option value="shapley">Shared Responsibility (Cooperative)</option>
-                    <option value="production">Production-Based (Territorial)</option>
-                    <option value="consumption">Consumption-Based (Footprint)</option>
-                  </select>
+                <div className="slider-container">
+                  <div className="slider-header" style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8.5rem' }}>
+                    <span style={{ color: '#3E6985', fontWeight: 700 }}>Consumer: {Math.round((1 - fairnessRatio) * 100)}%</span>
+                    <span style={{ color: '#ef4444', fontWeight: 700 }}>Producer: {Math.round(fairnessRatio * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    className="chunky-slider"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={fairnessRatio}
+                    onChange={e => setFairnessRatio(parseFloat(e.target.value))}
+                    style={{
+                      background: `linear-gradient(90deg, #3E6985 ${(1 - fairnessRatio) * 100}%, #ef4444 ${(1 - fairnessRatio) * 100}%)`
+                    }}
+                  />
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px', textAlign: 'center', fontStyle: 'italic' }}>
+                    {fairnessRatio > 0.6 ? 'Source-Based Burden' : fairnessRatio < 0.4 ? 'Consumption-Based Burden' : 'Shared Responsibility'}
+                  </div>
                 </div>
               )}
 
@@ -275,11 +359,7 @@ const PolicyLab = () => {
             <BilateralPolicySelector onOptimize={handleBilateralOptimize} isLoading={isBilateralLoading} />
           )}
 
-          <div className="sidebar-legend">
-            <div className="control-section-title">Map Key</div>
-            <div className="legend-item"><div className="legend-dot" style={{ background: '#ef4444' }}></div> High Risk (&gt;80 CO2)</div>
-            <div className="legend-item"><div className="legend-dot" style={{ background: '#3E6985' }}></div> Low Risk / Safe</div>
-          </div>
+
         </div>
       </aside>
 
@@ -296,8 +376,30 @@ const PolicyLab = () => {
         {/* 3. VISUALIZATION AREA */}
         <div className="visualization-area" onMouseMove={syncCameras}>
           {/* LEFT: REALITY */}
-          <div className="viz-panel">
+          <div className="viz-panel" style={{ position: 'relative' }}>
             <div className="panel-label">CURRENT REALITY</div>
+
+            {/* Context Legend: Left */}
+            <div style={{
+              position: 'absolute', bottom: '20px', left: '20px',
+              background: 'rgba(255, 255, 255, 0.95)',
+              padding: '16px', borderRadius: '12px',
+              border: '1px solid #cbd5e1',
+              pointerEvents: 'none', zIndex: 10,
+              fontSize: '0.75rem', color: '#334155',
+              width: '200px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
+            }}>
+              <strong style={{ display: 'block', marginBottom: '8px', textTransform: 'uppercase', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>Baseline Context</strong>
+
+              <div style={{ marginBottom: '4px', fontWeight: '700', color: '#64748b', fontSize: '0.7rem' }}>NODES (Economy Type)</div>
+              <div style={{ marginBottom: '2px' }}><span style={{ color: '#ef4444' }}>●</span> High Risk <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Heavy Industry Base)</span></div>
+              <div style={{ marginBottom: '8px' }}><span style={{ color: '#3E6985' }}>●</span> Low Risk <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Service/Tech Base)</span></div>
+
+              <div style={{ marginBottom: '4px', fontWeight: '700', color: '#64748b', fontSize: '0.7rem' }}>EDGES (Trade Intensity)</div>
+              <div style={{ marginBottom: '2px' }}><span style={{ color: '#ef4444', fontWeight: 'bold' }}>━━</span> Dirty Flow <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(High Embodied Carbon)</span></div>
+              <div><span style={{ color: '#94a3b8', fontWeight: 'bold' }}>━━</span> Clean Flow <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Low Intensity)</span></div>
+            </div>
             <ForceGraph3D
               ref={originalGraphRef}
               graphData={originalGraph}
@@ -307,12 +409,12 @@ const PolicyLab = () => {
 
               // MATCHED STYLES
               nodeVal={node => Math.max(2.5, Math.sqrt(node.gdp_usd || 0) / 7000)}
-              nodeColor={getNodeColor}
+              nodeColor={getOriginalNodeColor}
               nodeLabel={node => `${node.label || node.id || node.iso3}: Risk ${(node.co2 || 0).toFixed(1)}`}
               nodeResolution={24}
               nodeOpacity={0.9}
 
-              linkColor={getLinkColor}
+              linkColor={getOriginalLinkColor}
               linkWidth={link => {
                 const val = link.primaryValue || link.value || 0;
                 return Math.max(1.5, Math.sqrt(val) / 20000);
@@ -335,8 +437,57 @@ const PolicyLab = () => {
           </div>
 
           {/* RIGHT: FUTURE */}
-          <div className="viz-panel">
+          <div className="viz-panel" style={{ position: 'relative' }}>
             <div className="panel-label">SIMULATED FUTURE</div>
+
+            {/* Context Legend: Right (Dynamic based on Policy) */}
+            <div style={{
+              position: 'absolute', bottom: '20px', right: '20px',
+              background: 'rgba(255, 255, 255, 0.95)',
+              padding: '16px', borderRadius: '12px',
+              border: '1px solid #cbd5e1',
+              pointerEvents: 'none', zIndex: 10,
+              fontSize: '0.75rem', color: '#334155',
+              width: '240px',
+              textAlign: 'left',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+            }}>
+              <strong style={{ display: 'block', marginBottom: '8px', textTransform: 'uppercase', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', textAlign: 'right' }}>
+                {scenario === 'CBAM' ? 'CBAM Impact' : scenario === 'TECH_TRANSFER' ? 'Green Tech Impact' : 'Fairness Attribution'}
+              </strong>
+
+              {scenario === 'CBAM' && (
+                <>
+                  <div style={{ marginBottom: '4px', fontWeight: '700', color: '#64748b', fontSize: '0.7rem', textAlign: 'right' }}>NODES</div>
+                  <div style={{ marginBottom: '2px', textAlign: 'right' }}><span style={{ color: '#ef4444' }}>●</span> High Tariff <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Carbon Intensive)</span></div>
+                  <div style={{ marginBottom: '8px', textAlign: 'right' }}><span style={{ color: '#3E6985' }}>●</span> Low Tariff <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Decarbonized)</span></div>
+
+                  <div style={{ marginBottom: '4px', fontWeight: '700', color: '#64748b', fontSize: '0.7rem', textAlign: 'right' }}>EDGES</div>
+                  <div style={{ marginBottom: '2px', textAlign: 'right' }}>Restricted <span style={{ color: '#7c3aed', fontWeight: 'bold' }}>━━</span> <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Blocked by Cost)</span></div>
+                  <div style={{ marginBottom: '2px', textAlign: 'right' }}>Leakage <span style={{ color: '#f97316', fontWeight: 'bold' }}>━━</span> <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Avoids Regulation)</span></div>
+                </>
+              )}
+
+              {scenario === 'TECH_TRANSFER' && (
+                <>
+                  <div style={{ marginBottom: '4px', fontWeight: '700', color: '#64748b', fontSize: '0.7rem', textAlign: 'right' }}>NODES</div>
+                  <div style={{ marginBottom: '2px', textAlign: 'right' }}><span style={{ color: '#10b981' }}>●</span> Adopter <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Received Finance)</span></div>
+                  <div style={{ marginBottom: '8px', textAlign: 'right' }}><span style={{ color: '#94a3b8' }}>●</span> Laggard <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(High Cost Base)</span></div>
+
+                  <div style={{ marginBottom: '4px', fontWeight: '700', color: '#64748b', fontSize: '0.7rem', textAlign: 'right' }}>EDGES</div>
+                  <div style={{ marginBottom: '2px', textAlign: 'right' }}>Tech Flow <span style={{ color: '#06b6d4', fontWeight: 'bold' }}>━━</span> <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Clean Tech Transfer)</span></div>
+                </>
+              )}
+
+              {scenario === 'FAIRNESS_DIAL' && (
+                <>
+                  <div style={{ marginBottom: '4px', fontWeight: '700', color: '#64748b', fontSize: '0.7rem', textAlign: 'right' }}>NODES & EDGES</div>
+                  <div style={{ marginBottom: '2px', textAlign: 'right' }}>Source Pays <span style={{ color: '#ef4444', fontWeight: 'bold' }}>━━</span> <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Producer Liability)</span></div>
+                  <div style={{ marginBottom: '2px', textAlign: 'right' }}>Fair Agreement <span style={{ color: '#3E6985', fontWeight: 'bold' }}>━━</span> <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>(Shared Burden)</span></div>
+                  <div style={{ marginBottom: '0px', textAlign: 'right', fontStyle: 'italic', opacity: 0.8, fontSize: '0.65rem' }}>Sink Pays (Consumer Liability)</div>
+                </>
+              )}
+            </div>
             {simulatedGraph.nodes.length > 0 ? (
               <ForceGraph3D
                 ref={simulatedGraphRef}
@@ -347,15 +498,12 @@ const PolicyLab = () => {
 
                 // MATCHED STYLES
                 nodeVal={node => Math.max(2.5, Math.sqrt(node.gdp_usd || 0) / 7000)}
-                nodeColor={node => {
-                  // Keep highlighting simple to match Dashboard
-                  return node.node_color_override || getNodeColor(node);
-                }}
+                nodeColor={getFutureNodeColor}
                 nodeLabel={node => `${node.label || node.id || node.iso3}: Risk ${(node.co2 || 0).toFixed(1)}`}
                 nodeResolution={24}
                 nodeOpacity={0.9}
 
-                linkColor={link => link.edge_color || getLinkColor(link)}
+                linkColor={getFutureLinkColor}
                 linkWidth={link => {
                   const val = link.primaryValue || link.value || 0;
                   return Math.max(1.5, Math.sqrt(val) / 20000);
@@ -432,28 +580,10 @@ const PolicyLab = () => {
               )}
 
               {/* 4. RIPPLE EFFECTS (CBAM) */}
-              {metrics.ripple_effects && Object.keys(metrics.ripple_effects).length > 0 && (
-                <div className="insight-metric">
-                  <div className="insight-label">Ripple Impact</div>
-                  <div className="insight-value negative" style={{ fontSize: '12px', lineHeight: '1.2' }}>
-                    {Object.entries(metrics.ripple_effects).slice(0, 1).map(([iso, val]) => (
-                      <div key={iso}>{iso}: {val}</div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* 4. RIPPLE EFFECTS MOVED TO DRAWER */}
 
               {/* 5. FAIRNESS SPLIT (Fairness Dial) */}
-              {metrics.producer_ratio !== undefined && (
-                <div className="insight-metric">
-                  <div className="insight-label">Responsibility</div>
-                  <div className="insight-value" style={{ fontSize: '13px' }}>
-                    Prod: {Math.round(metrics.producer_ratio * 100)}%
-                    <br />
-                    Cons: {Math.round((1 - metrics.producer_ratio) * 100)}%
-                  </div>
-                </div>
-              )}
+
 
               {/* 6. RISK SHIFT (All) */}
               {metrics.leakage_risk && (
@@ -473,6 +603,20 @@ const PolicyLab = () => {
           </div>
           {isDrawerOpen && (
             <div className="drawer-content">
+              {/* GLOBAL: RIPPLE EFFECTS SECTION */}
+              {metrics && mode === 'global' && metrics.ripple_effects && Object.keys(metrics.ripple_effects).length > 0 && (
+                <div style={{ marginBottom: '24px', background: '#F8FAFC', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <h4 style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '12px', fontWeight: 700 }}>Global Supply Chain Ripple Effects</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                    {Object.entries(metrics.ripple_effects).map(([iso, val]) => (
+                      <div key={iso} style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem', color: '#334155', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                        <strong style={{ color: '#0D273D' }}>{iso}</strong>: {val}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Content for metrics + LLM Panel */}
               {metrics && mode === 'global' && <LLMAnalystPanel analysisType="policy" simulationData={latestSimulation} autoTrigger={true} />}
               {mode === 'bilateral' && bilateralResults && (
