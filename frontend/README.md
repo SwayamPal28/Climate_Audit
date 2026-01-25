@@ -1,70 +1,192 @@
-# Getting Started with Create React App
+```markdown
+# ClimaAuditX: AI-Driven Carbon Attribution and Policy Simulation
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+**ClimaAuditX** is an advanced analytical framework designed to address the "Carbon Loophole" in global trade. The system utilizes Heterogeneous Graph Neural Networks (HGNN) and Shapley Value-based game theory to assign fair carbon emission responsibility across international supply chains.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+##  Technical Overview
 
-### `npm start`
+The framework consists of three primary technical pillars:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+1. **Mirror Trade Reconstruction**: Reconciles asymmetric exporter-importer data to repair reporting gaps, particularly for developing nations.
+2. **Heterogeneous GNN Architecture**: Implements a Heterogeneous GATv2 model to trace multi-hop carbon flows through complex trade relationships.
+3. **Fairness Engine**: Uses Cooperative Game Theory (Shapley Values) to allocate responsibility based on a nation's marginal contribution to global emissions.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
 
-### `npm test`
+## Installation and Setup
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Prerequisites
 
-### `npm run build`
+Ensure you have the following installed on your system:
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- **Python 3.8+** ([Download](https://www.python.org/downloads/))
+- **Node.js 14+** and npm ([Download](https://nodejs.org/))
+- **Virtualenv** (for Python environment management)
+- **Git** ([Download](https://git-scm.com/))
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Clone the Repository
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```bash
+git clone https://github.com/yourusername/ClimaAuditX.git
+cd ClimaAuditX
+```
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Step-by-Step Execution
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+To run the full ClimaAuditX suite, you'll need to open **three separate terminals** and execute the following commands:
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### Terminal 1: Python ML Services (FastAPI)
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+This terminal runs the core AI/ML backend.
 
-## Learn More
+```bash
+# Navigate to the python-services directory
+cd python-services
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+# Create a virtual environment (if not already created)
+python -m venv venv
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+# Activate the virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+venv\Scripts\activate
 
-### Code Splitting
+# Install Python dependencies
+pip install -r requirements.txt
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+# Start the FastAPI server
+uvicorn app.main:app --reload --port 8000
+```
 
-### Analyzing the Bundle Size
+**Expected Output:**
+```
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process
+INFO:     Started server process
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+The ML services will be available at `http://localhost:8000`.
 
-### Making a Progressive Web App
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+### Terminal 2: Frontend Dashboard (React/Tailwind)
 
-### Advanced Configuration
+This terminal runs the user interface.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+```bash
+# Navigate to the frontend directory
+cd frontend
 
-### Deployment
+# Install Node.js dependencies (first time only)
+npm install
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+# Start the development server
+npm start
+```
 
-### `npm run build` fails to minify
+**Expected Output:**
+```
+Compiled successfully!
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+You can now view climaauditx in the browser.
+
+  Local:            http://localhost:3000
+  On Your Network:  http://192.168.x.x:3000
+
+Note that the development build is not optimized.
+To create a production build, use npm run build.
+```
+
+The frontend will be available at `http://localhost:3000`.
+
+---
+
+### Terminal 3: Node.js Backend
+
+This terminal runs the server-side API and data aggregation services.
+
+```bash
+# Navigate to the node-backend directory
+cd node-backend
+
+# Install Node.js dependencies (first time only)
+npm install
+
+# Start the development server
+npm run dev
+```
+
+**Expected Output:**
+```
+[nodemon] starting `node src/app.js`
+Node backend server running on port 5000
+Connected to database
+```
+
+The backend API will be available at `http://localhost:5000`.
+
+---
+
+##  Features
+
+### 1. **EU CBAM Simulator**
+Predicts trade contraction and economic shifts based on Carbon Border Adjustment Mechanism (CBAM) policies.
+
+- Analyzes impact on imports from developing nations
+- Projects revenue redistribution
+- Models compliance costs
+
+### 2. **Bilateral Optimizer**
+Identifies scientifically-targeted tariffs that balance decarbonization goals with GDP stability.
+
+- Pareto-optimal policy recommendations
+- Multi-objective optimization (emissions vs. economic impact)
+- Country-specific calibration
+
+### 3. **CATE Engine (Carbon-Adjusted Trade Equilibrium)**
+Provides a real-time dashboard for policy auditing and carbon attribution.
+
+- Interactive network visualization
+- Shapley value-based responsibility allocation
+- Multi-hop carbon tracing through supply chains
+
+---
+
+## Testing
+
+### Run Python Tests
+```bash
+cd python-services
+pytest tests/
+```
+
+### Run Node.js Tests
+```bash
+cd node-backend
+npm test
+```
+
+### Run Frontend Tests
+```bash
+cd frontend
+npm test
+```
+
+---
+
+##  Data Sources
+
+ClimaAuditX integrates data from multiple sources:
+
+- **UN Comtrade**: Bilateral trade flows
+- **EDGAR**: Country-level emissions data
+- **World Bank**: GDP and economic indicators
+- **IEA**: Energy and carbon intensity metrics
+
+
