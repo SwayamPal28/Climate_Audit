@@ -189,7 +189,12 @@ class PolicySimulator:
                 # No, applies to everything.
                 
                 # Feedback loop damping factor (0.1) to prevent runaway collapse in 5 steps
-                feedback_shock = (iter_loss / curr_total_vol) * MPI * 0.5
+                # feedback_shock = (iter_loss / curr_total_vol) * MPI * 0.5
+                
+                if curr_total_vol > 0:
+                    feedback_shock = (iter_loss / curr_total_vol) * MPI * 0.5
+                else:
+                    feedback_shock = 0.0
                 
                 current_edges['primaryValue'] *= (1.0 - feedback_shock)
             

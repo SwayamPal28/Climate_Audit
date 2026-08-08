@@ -645,6 +645,18 @@ async def simulate_policy(payload: PolicySimulationRequest):
             attribution_mode=payload.attribution_mode
         )
         
+        def clean_nan(obj):
+            if isinstance(obj, dict):
+                return {k: clean_nan(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [clean_nan(x) for x in obj]
+            elif isinstance(obj, float):
+                if np.isnan(obj) or np.isinf(obj):
+                    return 0.0  # Convert NaN/Inf to 0.0 for JSON compatibility
+            return obj
+        
+        result = clean_nan(result)
+
         # Convert result back to graph format (省略 impl detail, relying on logic similar to original)
         # For brevity, returning result directly as frontend likely handles it
         # Actually frontend handles specific graph format, so we need to rebuild graph response

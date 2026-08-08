@@ -1,0 +1,29 @@
+{
+  "creation_date": "2026-01-21T19:07:27.480390",
+  "num_countries": 192,
+  "num_sectors": 13,
+  "total_edges": 173004,
+  "model_loss": 0.00040584683301858604,
+  "sectors": [
+    "energy",
+    "steel",
+    "iron_articles",
+    "textiles",
+    "electronics",
+    "chemicals",
+    "agriculture",
+    "vehicles",
+    "aircraft",
+    "ships",
+    "cement",
+    "wood",
+    "precious_metals"
+  ],
+  "shapley_countries": [
+    "USA",
+    "CHN",
+    "IND",
+    "DEU",
+    "BRA"
+  ]
+}
